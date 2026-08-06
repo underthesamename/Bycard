@@ -1,0 +1,23 @@
+name: bycard
+
+services:
+  db:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bycard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bycard-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-bycard}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - bycard-postgres-data:/var/lib/postgresql
+    restart: unless-stopped
+
+volumes:
+  bycard-postgres-data:

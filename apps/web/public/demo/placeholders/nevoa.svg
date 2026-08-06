@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" role="img" aria-labelledby="title">
+  <title id="title">Placeholder abstrato de n&#xE9;voa</title>
+  <rect width="600" height="840" rx="36" fill="#5b7e9e"/>
+  <circle cx="420" cy="205" r="88" fill="#fff1a4"/>
+  <g fill="#eaf5fa" opacity=".88">
+    <ellipse cx="218" cy="364" rx="236" ry="92"/>
+    <ellipse cx="412" cy="480" rx="250" ry="96"/>
+    <ellipse cx="196" cy="608" rx="240" ry="90"/>
+  </g>
+  <path d="M0 690c192-74 334 39 600-43v193H0z" fill="#183b66"/>
+</svg>

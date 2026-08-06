@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder da cole&#xE7;&#xE3;o Jardins da Chuva</title>
+  <desc id="desc">Formas abstratas em azul e verde representam chuva sobre um jardim.</desc>
+  <defs>
+    <linearGradient id="rain" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#12366f"/>
+      <stop offset="1" stop-color="#2b8fbd"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" rx="44" fill="url(#rain)"/>
+  <g fill="none" stroke="#b8ecff" stroke-width="15" stroke-linecap="round" opacity=".8">
+    <path d="m170 86-42 84"/>
+    <path d="m322 52-42 84"/>
+    <path d="m482 98-42 84"/>
+    <path d="m650 62-42 84"/>
+    <path d="m810 105-42 84"/>
+  </g>
+  <path d="M0 405c143-67 245-70 374-7 147 73 283 79 586-17v159H0z" fill="#d9f3dd"/>
+  <path d="M0 458c185-59 326 23 473 19s263-75 487-43v106H0z" fill="#285f55"/>
+</svg>

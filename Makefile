@@ -1,0 +1,53 @@
+SHELL := /bin/bash
+
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check migrate import-demo
+
+setup: install db
+
+install:
+	pnpm install --frozen-lockfile
+	cargo fetch --locked
+
+db:
+	docker compose up -d --wait db
+
+db-down:
+	docker compose down
+
+dev:
+	$(MAKE) -j2 dev-api dev-web
+
+dev-api:
+	cargo run -p bycard-api
+
+dev-web:
+	pnpm dev
+
+test:
+	pnpm test
+	cargo test --workspace
+
+lint:
+	pnpm lint
+	pnpm typecheck
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+format:
+	pnpm format
+	cargo fmt --all
+
+format-check:
+	pnpm format:check
+	cargo fmt --all --check
+
+migrate:
+	cargo run -p bycard-api --bin migrate
+
+import-demo: migrate
+	cargo run -p bycard-api --bin import-demo-catalog

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" role="img" aria-labelledby="title">
+  <title id="title">Placeholder abstrato prism&#xE1;tico</title>
+  <rect width="600" height="840" rx="36" fill="#102a5c"/>
+  <path d="m300 112 188 326-188 109-188-109z" fill="#e8f4ff"/>
+  <path d="m300 112 188 326-188-42z" fill="#f7cc32"/>
+  <path d="m300 396 188 42-91 158z" fill="#54c6e8"/>
+  <path d="m300 396-188 42 91 158z" fill="#ef6e78"/>
+  <circle cx="300" cy="690" r="76" fill="#1974d2"/>
+</svg>

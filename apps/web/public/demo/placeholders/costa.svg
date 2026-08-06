@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" role="img" aria-labelledby="title">
+  <title id="title">Placeholder abstrato de costa</title>
+  <rect width="600" height="840" rx="36" fill="#d9f3ff"/>
+  <circle cx="418" cy="205" r="92" fill="#ffd541"/>
+  <path d="M0 424c142-94 267 26 386-18 80-30 147-22 214 3v431H0z" fill="#218ec4"/>
+  <path d="M0 558c180-105 313 74 600-31v313H0z" fill="#143c78"/>
+  <path d="m95 178 101 163H0V239z" fill="#426b63"/>
+</svg>

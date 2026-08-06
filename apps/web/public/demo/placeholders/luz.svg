@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" role="img" aria-labelledby="title">
+  <title id="title">Placeholder abstrato de luz</title>
+  <rect width="600" height="840" rx="36" fill="#114d9c"/>
+  <circle cx="390" cy="270" r="126" fill="#f7cc32"/>
+  <path d="M0 540c171-107 305 75 600-62v362H0z" fill="#e9f4ff"/>
+  <path d="M0 650c218-91 329 55 600-38v228H0z" fill="#17366d"/>
+</svg>
