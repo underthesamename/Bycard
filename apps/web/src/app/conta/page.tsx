@@ -7,7 +7,7 @@ import { BrandHeader } from "@/features/catalog/brand-header";
 import { API_V1_URL } from "@/lib/api-base";
 
 type Session = {
-  user: { displayName: string; email: string };
+  user: { displayName: string; username: string; email: string };
 };
 
 async function currentSession(): Promise<Session | null> {
@@ -28,14 +28,12 @@ export default async function AccountPage() {
     <div className="app-shell account-shell">
       <BrandHeader />
       <main className="account-main">
-        <p className="auth-kicker">Área privada</p>
         <h1>Olá, {session.user.displayName}.</h1>
         <p className="account-email">
-          Sua sessão está ativa em {session.user.email}.
+          @{session.user.username} · {session.user.email}
         </p>
         <section className="account-next">
           <div>
-            <span>Próximo passo</span>
             <h2>Escolha a coleção que você quer completar.</h2>
             <p>
               Abra o catálogo e encontre as cartas que já fazem parte do seu

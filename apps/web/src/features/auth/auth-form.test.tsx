@@ -21,11 +21,13 @@ afterEach(() => {
 
 describe("AuthForm", () => {
   it("envia o cadastro com credenciais incluídas e redireciona", async () => {
+    const onAuthenticated = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(201, {
         user: {
           id: "019fd3c0-a42b-7f70-9e0d-18eebdfb8212",
           displayName: "Ana",
+          username: "ana.tcg",
           email: "ana@example.com",
         },
         expiresAt: "2026-09-05T12:00:00Z",
@@ -33,9 +35,12 @@ describe("AuthForm", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<AuthForm mode="register" />);
-    fireEvent.change(screen.getByLabelText("Como podemos chamar você?"), {
+    render(<AuthForm mode="register" onAuthenticated={onAuthenticated} />);
+    fireEvent.change(screen.getByLabelText("Seu nome"), {
       target: { value: "Ana" },
+    });
+    fireEvent.change(screen.getByLabelText("Nome de usuário"), {
+      target: { value: "ana.tcg" },
     });
     fireEvent.change(screen.getByLabelText("E-mail"), {
       target: { value: "ana@example.com" },
@@ -49,17 +54,17 @@ describe("AuthForm", () => {
         .closest("form")!,
     );
 
-    await waitFor(() =>
-      expect(navigation.replace).toHaveBeenCalledWith("/conta"),
-    );
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/"));
+    expect(onAuthenticated).toHaveBeenCalledOnce();
     expect(navigation.refresh).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/auth/register",
+      "/api/v1/auth/register",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         body: JSON.stringify({
           displayName: "Ana",
+          username: "ana.tcg",
           email: "ana@example.com",
           password: "uma-senha-segura-com-15",
         }),
@@ -81,7 +86,7 @@ describe("AuthForm", () => {
     );
 
     render(<AuthForm mode="login" />);
-    fireEvent.change(screen.getByLabelText("E-mail"), {
+    fireEvent.change(screen.getByLabelText("E-mail ou nome de usuário"), {
       target: { value: "ana@example.com" },
     });
     fireEvent.change(screen.getByLabelText("Senha"), {
@@ -126,7 +131,7 @@ describe("LogoutButton", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8080/api/v1/auth/logout",
+      "/api/v1/auth/logout",
       expect.objectContaining({
         method: "POST",
         credentials: "include",

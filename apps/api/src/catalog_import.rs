@@ -312,6 +312,94 @@ fn validate_date(value: &str) -> Result<()> {
 
 pub async fn import_catalog(pool: &PgPool, fixture: &CatalogFixture) -> Result<ImportSummary> {
     validate_fixture(fixture)?;
+    persist_catalog(pool, fixture).await
+}
+
+pub async fn import_external_catalog(
+    pool: &PgPool,
+    fixture: &CatalogFixture,
+) -> Result<ImportSummary> {
+    validate_external_catalog(fixture)?;
+    persist_catalog(pool, fixture).await
+}
+
+fn validate_external_catalog(fixture: &CatalogFixture) -> Result<()> {
+    if fixture.schema_version != 1 {
+        bail!("unsupported catalog schemaVersion");
+    }
+    validate_key("game.slug", &fixture.game.slug)?;
+    validate_text("game.name", &fixture.game.name, 120)?;
+    if fixture.sets.is_empty() || fixture.sets.len() > 20 {
+        bail!("external catalog must contain between 1 and 20 sets");
+    }
+
+    let mut set_keys = HashSet::new();
+    for set in &fixture.sets {
+        if !set_keys.insert(set.external_key.as_str()) {
+            bail!("duplicate external set key");
+        }
+        validate_key("set.externalKey", &set.external_key)?;
+        validate_key("set.slug", &set.slug)?;
+        validate_text("set.name", &set.name, 160)?;
+        validate_optional_text("set.seriesName", set.series_name.as_deref(), 160)?;
+        validate_date(&set.release_date)?;
+        validate_external_asset("set.coverImageUrl", set.cover_image_url.as_deref())?;
+        if set.language != "en-US" {
+            bail!("external physical catalog language must be en-US");
+        }
+        if set.cards.is_empty()
+            || set.cards.len() > 500
+            || set.total_cards != set.cards.len() as i32
+        {
+            bail!("external set card count is invalid");
+        }
+
+        let mut card_keys = HashSet::new();
+        let mut local_numbers = HashSet::new();
+        for card in &set.cards {
+            if !card_keys.insert(card.external_key.as_str())
+                || !local_numbers.insert(card.local_number.as_str())
+            {
+                bail!("external set contains duplicate cards");
+            }
+            validate_key("card.externalKey", &card.external_key)?;
+            validate_text("card.localNumber", &card.local_number, 24)?;
+            validate_text("card.printedNumber", &card.printed_number, 32)?;
+            validate_text("card.name", &card.name, 160)?;
+            validate_optional_text("card.rarity", card.rarity.as_deref(), 120)?;
+            validate_optional_text("card.artist", card.artist.as_deref(), 120)?;
+            validate_external_asset("card.imageSmallUrl", card.image_small_url.as_deref())?;
+            validate_external_asset("card.imageLargeUrl", card.image_large_url.as_deref())?;
+            if card.sort_order < 1 || card.sort_order > 500 {
+                bail!("external card sortOrder is invalid");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_external_asset(field: &str, value: Option<&str>) -> Result<()> {
+    let Some(url) = value else {
+        return Ok(());
+    };
+    let is_official_collection_logo = field == "set.coverImageUrl"
+        && url.starts_with("https://d1i787aglh9bmb.cloudfront.net/assets/img/me-expansions/")
+        && url.ends_with(".png")
+        && !url.contains(['?', '#', '\\']);
+    if is_official_collection_logo {
+        return Ok(());
+    }
+    if url.len() > 300
+        || !url.starts_with("https://assets.tcgdex.net/")
+        || url.contains(['?', '#', '\\'])
+        || !url.ends_with(".webp")
+    {
+        bail!("{field} must be a TCGdex HTTPS WebP asset");
+    }
+    Ok(())
+}
+
+async fn persist_catalog(pool: &PgPool, fixture: &CatalogFixture) -> Result<ImportSummary> {
     let mut transaction = pool
         .begin()
         .await

@@ -30,6 +30,8 @@ use crate::{app::AppState, request_context::RequestId};
 const PASSWORD_MIN_CHARS: usize = 15;
 const PASSWORD_MAX_CHARS: usize = 128;
 const DISPLAY_NAME_MAX_CHARS: usize = 60;
+const USERNAME_MIN_CHARS: usize = 3;
+const USERNAME_MAX_CHARS: usize = 24;
 const SESSION_BYTES: usize = 32;
 const ARGON2_MEMORY_KIB: u32 = 19 * 1024;
 const ARGON2_ITERATIONS: u32 = 2;
@@ -147,6 +149,7 @@ pub fn router() -> Router<AppState> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RegisterRequest {
     display_name: String,
+    username: String,
     email: String,
     password: String,
 }
@@ -154,7 +157,7 @@ struct RegisterRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LoginRequest {
-    email: String,
+    identifier: String,
     password: String,
 }
 
@@ -170,6 +173,7 @@ struct SessionResponse {
 struct UserDto {
     id: Uuid,
     display_name: String,
+    username: String,
     email: String,
 }
 
@@ -178,6 +182,7 @@ pub(crate) struct SessionRow {
     session_id: Uuid,
     pub(crate) user_id: Uuid,
     display_name: String,
+    username: String,
     email: String,
     expires_at: DateTime<Utc>,
     last_seen_at: DateTime<Utc>,
@@ -192,6 +197,7 @@ async fn register(
     state.auth.validate_origin(&headers)?;
     let Json(request) = parse_json(body)?;
     let display_name = validate_display_name(&request.display_name)?;
+    let username = normalize_username(&request.username)?;
     let email = normalize_email(&request.email)?;
     validate_password(&request.password)?;
     if !state
@@ -211,10 +217,11 @@ async fn register(
         .await
         .map_err(log_database(&request_id))?;
     let insert_user = sqlx::query(
-        "INSERT INTO users (id, display_name, email, password_hash) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO users (id, display_name, username, email, password_hash) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(user_id)
     .bind(&display_name)
+    .bind(&username)
     .bind(&email)
     .bind(password_hash)
     .execute(&mut *transaction)
@@ -227,8 +234,8 @@ async fn register(
             == Some("23505")
         {
             return Err(AuthError::conflict(
-                "email_already_registered",
-                "Já existe uma conta com este e-mail.",
+                "account_already_registered",
+                "Este nome de usuário ou e-mail já está em uso.",
             ));
         }
         log_database(&request_id)(error);
@@ -247,6 +254,7 @@ async fn register(
         UserDto {
             id: user_id,
             display_name,
+            username,
             email,
         },
         session.expires_at,
@@ -265,28 +273,30 @@ async fn login(
     if request.password.chars().count() > PASSWORD_MAX_CHARS {
         return Err(AuthError::invalid_credentials());
     }
-    let email = normalize_email(&request.email).map_err(|_| AuthError::invalid_credentials())?;
+    let identifier = normalize_login_identifier(&request.identifier)?;
     if !state
         .auth
         .limiter
-        .allow("login", &email, 5, Duration::from_secs(15 * 60))
+        .allow("login", &identifier, 5, Duration::from_secs(15 * 60))
     {
         return Err(AuthError::too_many_requests());
     }
-    let credentials = sqlx::query_as::<_, (Uuid, String, String, String)>(
-        "SELECT id, display_name, email, password_hash FROM users WHERE email = $1 AND deleted_at IS NULL",
+    let credentials = sqlx::query_as::<_, (Uuid, String, String, String, String)>(
+        "SELECT id, display_name, username, email, password_hash FROM users WHERE (email = $1 OR username = $1) AND deleted_at IS NULL",
     )
-    .bind(&email)
+    .bind(&identifier)
     .fetch_optional(&state.pool)
     .await
     .map_err(log_database(&request_id))?;
     let stored_hash = credentials
         .as_ref()
         .map_or(state.auth.dummy_password_hash.as_str(), |value| {
-            value.3.as_str()
+            value.4.as_str()
         });
     let password_matches = verify_password(request.password, stored_hash.to_owned()).await?;
-    let Some((user_id, display_name, email, _)) = credentials.filter(|_| password_matches) else {
+    let Some((user_id, display_name, username, email, _)) =
+        credentials.filter(|_| password_matches)
+    else {
         return Err(AuthError::invalid_credentials());
     };
 
@@ -318,6 +328,7 @@ async fn login(
         UserDto {
             id: user_id,
             display_name,
+            username,
             email,
         },
         session.expires_at,
@@ -347,6 +358,7 @@ async fn me(
         user: UserDto {
             id: session.user_id,
             display_name: session.display_name,
+            username: session.username,
             email: session.email,
         },
         expires_at: session.expires_at,
@@ -439,7 +451,7 @@ pub(crate) async fn active_session(
         .ok_or_else(AuthError::unauthorized)?;
     let token_hash = state.auth.token_hash(b"session", token);
     sqlx::query_as::<_, SessionRow>(
-        "SELECT s.id AS session_id, u.id AS user_id, u.display_name, u.email, s.expires_at, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND s.last_seen_at > NOW() - $2::interval AND u.deleted_at IS NULL",
+        "SELECT s.id AS session_id, u.id AS user_id, u.display_name, u.username, u.email, s.expires_at, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND s.last_seen_at > NOW() - $2::interval AND u.deleted_at IS NULL",
     )
     .bind(token_hash.as_slice())
     .bind(duration_interval(state.auth.settings.idle_ttl))
@@ -551,6 +563,45 @@ fn normalize_email(raw: &str) -> Result<String, AuthError> {
     }
 }
 
+fn normalize_username(raw: &str) -> Result<String, AuthError> {
+    let username = raw.trim().to_ascii_lowercase();
+    let length = username.len();
+    let valid_chars = username.bytes().all(|byte| {
+        byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+    });
+    let has_valid_separators = !username
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| matches!(byte, b'.' | b'_' | b'-'))
+        && !username
+            .as_bytes()
+            .last()
+            .is_some_and(|byte| matches!(byte, b'.' | b'_' | b'-'))
+        && !username.as_bytes().windows(2).any(|pair| {
+            matches!(pair[0], b'.' | b'_' | b'-') && matches!(pair[1], b'.' | b'_' | b'-')
+        });
+    if (USERNAME_MIN_CHARS..=USERNAME_MAX_CHARS).contains(&length)
+        && valid_chars
+        && has_valid_separators
+    {
+        Ok(username)
+    } else {
+        Err(AuthError::bad_request(
+            "invalid_username",
+            "Use de 3 a 24 letras minúsculas, números, ponto, hífen ou sublinhado.",
+        ))
+    }
+}
+
+fn normalize_login_identifier(raw: &str) -> Result<String, AuthError> {
+    let identifier = raw.trim().to_ascii_lowercase();
+    if identifier.contains('@') {
+        normalize_email(&identifier).map_err(|_| AuthError::invalid_credentials())
+    } else {
+        normalize_username(&identifier).map_err(|_| AuthError::invalid_credentials())
+    }
+}
+
 fn validate_display_name(raw: &str) -> Result<String, AuthError> {
     let display_name = raw.trim();
     let length = display_name.chars().count();
@@ -567,12 +618,12 @@ fn validate_display_name(raw: &str) -> Result<String, AuthError> {
 
 fn validate_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
-    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&length) {
+    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&length) && password.trim() == password {
         Ok(())
     } else {
         Err(AuthError::bad_request(
             "invalid_password",
-            "A senha deve ter entre 15 e 128 caracteres.",
+            "A senha deve ter entre 15 e 128 caracteres e não pode começar ou terminar com espaços.",
         ))
     }
 }
@@ -766,5 +817,16 @@ mod tests {
         assert!(validate_password("123456789012345").is_ok());
         assert!(validate_password("curta").is_err());
         assert!(validate_password(&"x".repeat(129)).is_err());
+    }
+
+    #[test]
+    fn validates_and_normalizes_usernames() {
+        assert!(matches!(
+            normalize_username("  Ana.TCG  "),
+            Ok(username) if username == "ana.tcg"
+        ));
+        assert!(normalize_username("an").is_err());
+        assert!(normalize_username("ana--tcg").is_err());
+        assert!(normalize_username("ana espaço").is_err());
     }
 }

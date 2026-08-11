@@ -1,6 +1,7 @@
 pub mod app;
 pub mod catalog_import;
 pub mod database;
+pub mod tcgdex_import;
 
 mod auth;
 mod catalog;

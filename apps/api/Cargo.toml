@@ -18,6 +18,10 @@ path = "src/bin/migrate.rs"
 name = "import-demo-catalog"
 path = "src/bin/import_demo_catalog.rs"
 
+[[bin]]
+name = "import-tcgdex"
+path = "src/bin/import_tcgdex.rs"
+
 [dependencies]
 anyhow.workspace = true
 argon2.workspace = true
@@ -27,6 +31,7 @@ chrono.workspace = true
 dotenvy.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

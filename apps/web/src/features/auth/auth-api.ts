@@ -3,6 +3,7 @@ import { API_V1_URL } from "@/lib/api-base";
 export type AuthUser = {
   id: string;
   displayName: string;
+  username: string;
   email: string;
 };
 
@@ -20,6 +21,7 @@ export class AuthRequestError extends Error {
 
 export async function registerAccount(input: {
   displayName: string;
+  username: string;
   email: string;
   password: string;
 }) {
@@ -29,7 +31,10 @@ export async function registerAccount(input: {
   });
 }
 
-export async function loginAccount(input: { email: string; password: string }) {
+export async function loginAccount(input: {
+  identifier: string;
+  password: string;
+}) {
   return authRequest<AuthResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(input),

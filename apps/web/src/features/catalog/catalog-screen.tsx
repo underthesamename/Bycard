@@ -16,7 +16,7 @@ import {
 import { BrandHeader } from "./brand-header";
 import { CatalogImage } from "./catalog-image";
 import { type Collection, fetchCollections } from "./catalog-api";
-import { ArrowRightIcon, BookIcon } from "./icons";
+import { ArrowRightIcon } from "./icons";
 
 type LoadState =
   | { status: "loading" }
@@ -110,13 +110,6 @@ export function CatalogScreen() {
               depender de planilhas.
             </p>
           </div>
-          <div className="demo-note">
-            <BookIcon aria-hidden="true" />
-            <span>
-              <strong>Catálogo de demonstração</strong>
-              Dados e imagens fictícios criados para o Bycard.
-            </span>
-          </div>
         </section>
 
         <section
@@ -126,9 +119,6 @@ export function CatalogScreen() {
         >
           <div className="section-heading">
             <h2 id="available-title">Coleções disponíveis</h2>
-            {loadState.status === "ready" && (
-              <p>{loadState.collections.length} coleções para explorar</p>
-            )}
           </div>
 
           {personalStatus === "ready" && personalCollections.length > 0 && (
@@ -181,7 +171,6 @@ export function CatalogScreen() {
           )}
         </section>
       </main>
-      <Footer />
     </div>
   );
 }
@@ -203,7 +192,13 @@ function CollectionRow({
 }) {
   return (
     <article className="collection-row">
-      <div className="collection-cover">
+      <div
+        className={`collection-cover${
+          collection.slug === "tcgdex-me05"
+            ? " collection-cover--escuridao-absoluta"
+            : ""
+        }`}
+      >
         <CatalogImage
           src={collection.coverImageUrl}
           alt={`Capa da coleção ${collection.name}`}
@@ -234,9 +229,16 @@ function CollectionRow({
       </div>
       <div className="collection-actions">
         {personalCollection && (
-          <span className="collection-progress">
-            {Math.round(personalCollection.completionPercentage)}% completo
-          </span>
+          <div className="collection-progress">
+            <span>
+              {Math.round(personalCollection.completionPercentage)}% completo
+            </span>
+            <progress
+              max={100}
+              value={personalCollection.completionPercentage}
+              aria-label={`${Math.round(personalCollection.completionPercentage)}% da coleção concluída`}
+            />
+          </div>
         )}
         {personalStatus === "ready" && !personalCollection && (
           <button
@@ -316,18 +318,6 @@ function EmptyCatalog() {
         <p>Quando o catálogo for importado, suas coleções aparecerão aqui.</p>
       </div>
     </div>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="site-footer">
-      <strong>Bycard</strong>
-      <p>
-        Projeto independente, não comercial e sem associação com Nintendo,
-        Creatures, Game Freak ou The Pokémon Company.
-      </p>
-    </footer>
   );
 }
 

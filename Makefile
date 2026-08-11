@@ -5,7 +5,7 @@ include .env
 export
 endif
 
-.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check migrate import-demo
+.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check migrate import-demo import-tcgdex
 
 setup: install db
 
@@ -51,3 +51,6 @@ migrate:
 
 import-demo: migrate
 	cargo run -p bycard-api --bin import-demo-catalog
+
+import-tcgdex: migrate
+	cargo run -p bycard-api --bin import-tcgdex -- $(TCGDEX_SET_IDS)

@@ -184,7 +184,9 @@ export function BinderScreen({ setId }: { setId: string }) {
                   Coleções
                 </Link>
                 <div>
-                  <p>Catálogo de demonstração</p>
+                  <p>
+                    {binderState.collection.seriesName ?? "Coleção de cartas"}
+                  </p>
                   <h1 id="binder-title">{binderState.collection.name}</h1>
                 </div>
               </div>
@@ -199,6 +201,13 @@ export function BinderScreen({ setId }: { setId: string }) {
                     ? `${binderState.stats.ownedUnique} de ${binderState.stats.totalUnique} obtidas`
                     : "cartas no catálogo"}
                 </span>
+                {binderState.stats && (
+                  <progress
+                    max={100}
+                    value={binderState.stats.completionPercentage}
+                    aria-label={`${Math.round(binderState.stats.completionPercentage)}% da coleção concluída`}
+                  />
+                )}
               </div>
               <label className="search-field">
                 <SearchIcon aria-hidden="true" />
