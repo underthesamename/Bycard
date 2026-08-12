@@ -197,7 +197,7 @@ async fn register(app: &Router, display_name: &str, email: &str) -> Result<Sessi
             .header(header::ORIGIN, ORIGIN)
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
-                json!({ "displayName": display_name, "email": email, "password": PASSWORD })
+                json!({ "displayName": display_name, "username": format!("user-{}", Uuid::now_v7().simple()).chars().take(24).collect::<String>(), "email": email, "password": PASSWORD })
                     .to_string(),
             ))?,
     )

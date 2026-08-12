@@ -6,33 +6,46 @@ import { FormEvent, useState } from "react";
 
 import { AuthRequestError, loginAccount, registerAccount } from "./auth-api";
 
-type AuthFormProps = { mode: "login" | "register" };
+type AuthFormProps = Readonly<{
+  mode: "login" | "register";
+  onAuthenticated?: () => void | Promise<void>;
+}>;
 
-export function AuthForm({ mode }: AuthFormProps) {
+type SubmissionState = "idle" | "submitting" | "authenticated";
+
+export function AuthForm({ mode, onAuthenticated }: AuthFormProps) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [submissionState, setSubmissionState] =
+    useState<SubmissionState>("idle");
   const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
   const isRegister = mode === "register";
+  const pending = submissionState !== "idle";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
+    setSubmissionState("submitting");
     setError("");
     const data = new FormData(event.currentTarget);
     try {
-      const email = String(data.get("email"));
-      const password = String(data.get("password"));
+      const submittedPassword = String(data.get("password"));
       if (isRegister) {
         await registerAccount({
           displayName: String(data.get("displayName")),
-          email,
-          password,
+          username: String(data.get("username")),
+          email: String(data.get("email")),
+          password: submittedPassword,
         });
       } else {
-        await loginAccount({ email, password });
+        await loginAccount({
+          identifier: String(data.get("identifier")),
+          password: submittedPassword,
+        });
       }
-      router.replace("/conta");
+      setSubmissionState("authenticated");
+      await onAuthenticated?.();
+      router.replace("/");
       router.refresh();
     } catch (cause) {
       setError(
@@ -40,8 +53,7 @@ export function AuthForm({ mode }: AuthFormProps) {
           ? cause.message
           : "Não foi possível conectar ao Bycard.",
       );
-    } finally {
-      setPending(false);
+      setSubmissionState("idle");
     }
   }
 
@@ -52,27 +64,62 @@ export function AuthForm({ mode }: AuthFormProps) {
       aria-describedby={error ? "auth-error" : undefined}
     >
       {isRegister && (
+        <>
+          <label>
+            Seu nome
+            <input
+              name="displayName"
+              autoComplete="name"
+              minLength={2}
+              maxLength={60}
+              placeholder="Como podemos chamar você?"
+              required
+            />
+          </label>
+          <div>
+            <label htmlFor="register-username">Nome de usuário</label>
+            <span className="username-field">
+              <span aria-hidden="true">@</span>
+              <input
+                id="register-username"
+                name="username"
+                autoComplete="username"
+                minLength={3}
+                maxLength={24}
+                pattern="[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*"
+                placeholder="treinador.ana"
+                aria-describedby="username-guidance"
+                required
+              />
+            </span>
+            <small id="username-guidance">
+              De 3 a 24 letras, números, ponto, hífen ou sublinhado.
+            </small>
+          </div>
+        </>
+      )}
+      {isRegister ? (
         <label>
-          Como podemos chamar você?
+          E-mail
           <input
-            name="displayName"
-            autoComplete="name"
-            minLength={2}
-            maxLength={60}
+            name="email"
+            type="email"
+            autoComplete="email"
+            maxLength={254}
+            required
+          />
+        </label>
+      ) : (
+        <label>
+          E-mail ou nome de usuário
+          <input
+            name="identifier"
+            autoComplete="username"
+            maxLength={254}
             required
           />
         </label>
       )}
-      <label>
-        E-mail
-        <input
-          name="email"
-          type="email"
-          autoComplete="email"
-          maxLength={254}
-          required
-        />
-      </label>
       <div>
         <label htmlFor={`${mode}-password`}>Senha</label>
         <span className="password-field">
@@ -84,6 +131,8 @@ export function AuthForm({ mode }: AuthFormProps) {
             aria-describedby={isRegister ? "password-guidance" : undefined}
             minLength={isRegister ? 15 : undefined}
             maxLength={128}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             required
           />
           <button
@@ -94,7 +143,13 @@ export function AuthForm({ mode }: AuthFormProps) {
           </button>
         </span>
         {isRegister && (
-          <small id="password-guidance">Use pelo menos 15 caracteres.</small>
+          <ul className="password-rules" id="password-guidance">
+            <li data-met={password.length >= 15}>Pelo menos 15 caracteres</li>
+            <li data-met={password.length <= 128}>No máximo 128 caracteres</li>
+            <li data-met={password.trim().length === password.length}>
+              Sem espaços no começo ou no fim
+            </li>
+          </ul>
         )}
       </div>
       {error && (
@@ -103,11 +158,13 @@ export function AuthForm({ mode }: AuthFormProps) {
         </p>
       )}
       <button className="auth-submit" type="submit" disabled={pending}>
-        {pending
-          ? "Só um instante…"
-          : isRegister
-            ? "Criar meu fichário"
-            : "Entrar no fichário"}
+        {submissionState === "submitting"
+          ? "Verificando…"
+          : submissionState === "authenticated"
+            ? "Abrindo seu fichário…"
+            : isRegister
+              ? "Criar meu fichário"
+              : "Entrar no fichário"}
       </button>
       <p className="auth-switch">
         {isRegister ? "Já possui uma conta?" : "Ainda não possui conta?"}{" "}

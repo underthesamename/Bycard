@@ -55,6 +55,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         "/api/v1/auth/register",
         json!({
             "displayName": "  Ana Colecionadora  ",
+            "username": "  Ana.TCG  ",
             "email": "  ANA@EXAMPLE.COM ",
             "password": PASSWORD
         }),
@@ -68,6 +69,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         "Ana Colecionadora"
     );
     assert_eq!(registration.body["user"]["email"], "ana@example.com");
+    assert_eq!(registration.body["user"]["username"], "ana.tcg");
     let cookie = registration
         .cookie
         .context("registration must set a cookie")?;
@@ -81,13 +83,16 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
     let duplicate = post_json(
         &app,
         "/api/v1/auth/register",
-        json!({"displayName": "Outra Ana", "email": "ana@example.com", "password": PASSWORD}),
+        json!({"displayName": "Outra Ana", "username": "outra.ana", "email": "ana@example.com", "password": PASSWORD}),
         None,
         None,
     )
     .await?;
     assert_eq!(duplicate.status, StatusCode::CONFLICT);
-    assert_eq!(duplicate.body["error"]["code"], "email_already_registered");
+    assert_eq!(
+        duplicate.body["error"]["code"],
+        "account_already_registered"
+    );
 
     let valid_session = get(&app, "/api/v1/auth/me", Some(&cookie)).await?;
     assert_eq!(valid_session.status, StatusCode::OK);
@@ -107,7 +112,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
     let missing_origin = post_json(
         &app,
         "/api/v1/auth/login",
-        json!({"email": "ana@example.com", "password": PASSWORD}),
+        json!({"identifier": "ana@example.com", "password": PASSWORD}),
         None,
         Some(""),
     )
@@ -170,7 +175,7 @@ async fn verify_expired_session(pool: &PgPool) -> Result<()> {
     let response = post_json(
         &app,
         "/api/v1/auth/register",
-        json!({"displayName": "Sessão Curta", "email": email, "password": PASSWORD}),
+        json!({"displayName": "Sessão Curta", "username": format!("curta-{}", Uuid::now_v7().simple()).chars().take(24).collect::<String>(), "email": email, "password": PASSWORD}),
         None,
         None,
     )
@@ -219,7 +224,7 @@ async fn verify_production_cookie(pool: &PgPool) -> Result<()> {
     let response = post_json(
         &app,
         "/api/v1/auth/register",
-        json!({"displayName": "Cookie Seguro", "email": email, "password": PASSWORD}),
+        json!({"displayName": "Cookie Seguro", "username": format!("seguro-{}", Uuid::now_v7().simple()).chars().take(24).collect::<String>(), "email": email, "password": PASSWORD}),
         None,
         None,
     )
@@ -245,7 +250,7 @@ async fn login(app: &Router, email: &str, password: &str) -> Result<TestResponse
     post_json(
         app,
         "/api/v1/auth/login",
-        json!({"email": email, "password": password}),
+        json!({"identifier": email, "password": password}),
         None,
         None,
     )

@@ -49,6 +49,14 @@ Para aplicar as migrations e importar as duas coleções fictícias:
 make import-demo
 ```
 
+Para importar uma ou mais coleções físicas reais da TCGdex, informe os IDs das
+coleções. A integração é somente leitura, não exige chave e mantém os dados no
+PostgreSQL local:
+
+```bash
+make import-tcgdex TCGDEX_SET_IDS="me01 me02"
+```
+
 O importador aceita opcionalmente outro arquivo como primeiro argumento:
 
 ```bash
