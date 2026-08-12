@@ -45,6 +45,23 @@ make check-config
 
 O verificador rejeita valores locais conhecidos, origens com caminho ou credenciais, banco sem validação completa do certificado e upstream HTTP em produção.
 
+### Imagem de produção da API
+
+A API possui uma imagem multi-stage independente de provedor, com versões de base fixadas por digest, binários compilados em modo `release` e runtime sem root. O contexto do Docker aceita somente os manifests e fontes Rust necessários, impedindo que `.env`, frontend e arquivos locais sejam enviados ao builder.
+
+```bash
+make api-image
+docker run --rm \
+  --env-file /caminho/seguro/bycard-api.env \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --publish 8080:8080 \
+  bycard-api:local
+```
+
+O processo valida toda a configuração antes de escutar conexões, responde a `SIGTERM` com encerramento gracioso e inclui um healthcheck em `/health/live`. Não inclua o arquivo real de variáveis no contexto do Docker nem no repositório.
+
 ## Executar localmente
 
 Inicie o banco:

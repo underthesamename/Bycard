@@ -29,9 +29,7 @@ impl Config {
         let bind_address = required("API_HOST")?
             .parse()
             .context("API_HOST must be a valid IP address")?;
-        let port = required("API_PORT")?
-            .parse()
-            .context("API_PORT must be a valid port")?;
+        let port = validate_port(&required("API_PORT")?)?;
         let database_url = validate_database_url(&app_env, &required("DATABASE_URL")?)?;
 
         let web_origin = validate_web_origin(&app_env, &required("WEB_ORIGIN")?)?;
@@ -75,6 +73,14 @@ fn validate_environment(app_env: &str) -> Result<()> {
         bail!("APP_ENV must be one of: local, test, production");
     }
     Ok(())
+}
+
+fn validate_port(raw_port: &str) -> Result<u16> {
+    let port = raw_port.parse().context("API_PORT must be a valid port")?;
+    if port == 0 {
+        bail!("API_PORT must be greater than zero");
+    }
+    Ok(port)
 }
 
 fn validate_database_url(app_env: &str, raw_url: &str) -> Result<String> {
@@ -160,7 +166,17 @@ fn required(name: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_database_url, validate_session_hmac_key, validate_web_origin};
+    use super::{
+        validate_database_url, validate_port, validate_session_hmac_key, validate_web_origin,
+    };
+
+    #[test]
+    fn api_port_must_be_a_nonzero_u16() {
+        assert_eq!(validate_port("8080").expect("8080 is a valid port"), 8080);
+        assert!(validate_port("0").is_err());
+        assert!(validate_port("65536").is_err());
+        assert!(validate_port("not-a-port").is_err());
+    }
 
     #[test]
     fn production_requires_https_origin_without_extra_components() {

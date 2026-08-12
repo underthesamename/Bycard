@@ -71,3 +71,65 @@ jobs:
           CSRF_TTL_SECONDS: 1800
           DATABASE_URL: postgresql://user:password@db.example/bycard?sslmode=verify-full
       - run: cargo build --workspace --locked
+
+  api-container:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: bycard
+          POSTGRES_PASSWORD: bycard-ci-only
+          POSTGRES_DB: bycard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bycard -d bycard"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build --tag bycard-api:ci .
+      - name: Verify hardened runtime
+        run: |
+          set -eu
+          test "$(docker image inspect --format '{{.Config.User}}' bycard-api:ci)" = "65532:65532"
+
+          container=bycard-api-smoke
+          cleanup() {
+            docker logs "$container" || true
+            docker rm --force "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach \
+            --name "$container" \
+            --network host \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --env APP_ENV=test \
+            --env API_HOST=127.0.0.1 \
+            --env API_PORT=8080 \
+            --env WEB_ORIGIN=http://127.0.0.1:3000 \
+            --env SESSION_HMAC_KEY=ci-container-key-with-at-least-thirty-two-bytes \
+            --env SESSION_TTL_SECONDS=2592000 \
+            --env SESSION_IDLE_TTL_SECONDS=604800 \
+            --env SESSION_TOUCH_INTERVAL_SECONDS=300 \
+            --env CSRF_TTL_SECONDS=1800 \
+            --env DATABASE_URL=postgresql://bycard:bycard-ci-only@127.0.0.1:5432/bycard \
+            bycard-api:ci
+
+          for attempt in $(seq 1 30); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+            if [ "$status" = healthy ]; then
+              exit 0
+            fi
+            if [ "$status" = unhealthy ]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          exit 1

@@ -26,6 +26,10 @@ path = "src/bin/import_tcgdex.rs"
 name = "check-config"
 path = "src/bin/check_config.rs"
 
+[[bin]]
+name = "container-healthcheck"
+path = "src/bin/container_healthcheck.rs"
+
 [dependencies]
 anyhow.workspace = true
 argon2.workspace = true
