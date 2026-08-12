@@ -6,3 +6,8 @@ coverage/
 .DS_Store
 *.log
 *.tsbuildinfo
+
+# Contexto local de ferramentas de IA; não faz parte do produto publicado.
+.impeccable/
+DESIGN.md
+PRODUCT.md
