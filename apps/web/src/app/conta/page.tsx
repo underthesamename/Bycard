@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { LogoutButton } from "@/features/auth/logout-button";
 import { BrandHeader } from "@/features/catalog/brand-header";
-import { API_V1_URL } from "@/lib/api-base";
+import { SERVER_API_V1_URL } from "@/lib/server-api-base";
 
 type Session = {
   user: { displayName: string; username: string; email: string };
@@ -12,7 +12,7 @@ type Session = {
 
 async function currentSession(): Promise<Session | null> {
   const cookieStore = await cookies();
-  const response = await fetch(`${API_V1_URL}/auth/me`, {
+  const response = await fetch(`${SERVER_API_V1_URL}/auth/me`, {
     headers: { Cookie: cookieStore.toString(), Accept: "application/json" },
     cache: "no-store",
   }).catch(() => null);

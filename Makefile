@@ -5,7 +5,7 @@ include .env
 export
 endif
 
-.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check migrate import-demo import-tcgdex
+.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check check-config migrate import-demo import-tcgdex
 
 setup: install db
 
@@ -45,6 +45,9 @@ format:
 format-check:
 	pnpm format:check
 	cargo fmt --all --check
+
+check-config:
+	cargo run -p bycard-api --bin check-config
 
 migrate:
 	cargo run -p bycard-api --bin migrate

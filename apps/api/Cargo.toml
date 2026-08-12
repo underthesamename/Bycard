@@ -22,6 +22,10 @@ path = "src/bin/import_demo_catalog.rs"
 name = "import-tcgdex"
 path = "src/bin/import_tcgdex.rs"
 
+[[bin]]
+name = "check-config"
+path = "src/bin/check_config.rs"
+
 [dependencies]
 anyhow.workspace = true
 argon2.workspace = true
@@ -42,6 +46,7 @@ tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
