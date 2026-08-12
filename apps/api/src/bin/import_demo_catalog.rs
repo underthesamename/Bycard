@@ -1,15 +1,12 @@
 use std::{env, path::PathBuf};
 
-use anyhow::{Context, Result, bail};
-use bycard_api::{catalog_import, database};
+use anyhow::Result;
+use bycard_api::{catalog_import, config, database};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
-    let database_url = env::var("DATABASE_URL").context("DATABASE_URL is required")?;
-    if database_url.trim().is_empty() {
-        bail!("DATABASE_URL cannot be empty");
-    }
+    let database_url = config::database_url_from_env()?;
 
     let fixture_path = env::args_os().nth(1).map(PathBuf::from).unwrap_or_else(|| {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/demo-catalog/catalog.json")

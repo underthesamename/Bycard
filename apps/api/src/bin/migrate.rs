@@ -1,15 +1,10 @@
-use std::env;
-
-use anyhow::{Context, Result, bail};
-use bycard_api::database;
+use anyhow::{Context, Result};
+use bycard_api::{config, database};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
-    let database_url = env::var("DATABASE_URL").context("DATABASE_URL is required")?;
-    if database_url.trim().is_empty() {
-        bail!("DATABASE_URL cannot be empty");
-    }
+    let database_url = config::database_url_from_env()?;
 
     let pool = database::connect(&database_url).await?;
     sqlx::migrate!("./migrations")

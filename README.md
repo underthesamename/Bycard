@@ -2,7 +2,7 @@
 
 Bycard é um fichário digital para acompanhar coleções de cartas. O objetivo é ajudar a identificar com clareza quais cartas já estão no fichário e quais ainda faltam.
 
-Este repositório contém o frontend Next.js, a API Rust/Axum, o PostgreSQL local, migrations, importação transacional, catálogo público fictício, autenticação por sessão, coleções pessoais e controle de quantidades.
+Este repositório contém o frontend Next.js, a API Rust/Axum, o PostgreSQL local, migrations, importação transacional, catálogo público, autenticação por sessão, coleções pessoais e controle de quantidades.
 
 ## Pré-requisitos
 
@@ -20,6 +20,30 @@ cargo fetch --locked
 ```
 
 Os valores de `.env.example` são exclusivos para desenvolvimento local. Não os reutilize em produção.
+
+### Contrato de produção
+
+`.env.production.example` documenta todas as variáveis exigidas no ambiente publicado. Os valores reais devem ser configurados no gestor de segredos da hospedagem, nunca em um arquivo versionado.
+
+- `APP_ENV` deve ser `production`;
+- `WEB_ORIGIN` deve conter somente a origem HTTPS pública do frontend;
+- `DATABASE_URL` deve usar PostgreSQL com `sslmode=verify-full`;
+- `SESSION_HMAC_KEY` deve ser um segredo aleatório com pelo menos 32 bytes;
+- `API_UPSTREAM_URL` é usada somente pelo servidor Next.js e deve apontar para a API por HTTPS.
+
+Gere o segredo de sessão fora do repositório e salve o resultado diretamente no gestor de segredos:
+
+```bash
+openssl rand -base64 48
+```
+
+Antes de iniciar a API, valide as variáveis sem abrir conexão com o banco:
+
+```bash
+make check-config
+```
+
+O verificador rejeita valores locais conhecidos, origens com caminho ou credenciais, banco sem validação completa do certificado e upstream HTTP em produção.
 
 ## Executar localmente
 
@@ -102,4 +126,4 @@ make migrate
 - holdings representam somente a quantidade total por carta, sem variante, idioma, condição ou notas;
 - a integração com providers externos não faz parte desta etapa;
 - nenhuma arte oficial é armazenada no repositório;
-- o catálogo público é inteiramente fictício e não possui associação com franquias reais.
+- o catálogo importado não implica associação com Nintendo, Creatures, Game Freak ou The Pokémon Company.

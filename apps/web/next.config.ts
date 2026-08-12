@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { resolveApiUpstreamUrl } from "./src/lib/api-upstream";
+
 const nextConfig: NextConfig = {
   agentRules: false,
   devIndicators: false,
@@ -23,12 +25,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   async rewrites() {
-    const apiBaseUrl =
-      process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080";
+    const apiUpstreamUrl = resolveApiUpstreamUrl();
     return [
       {
         source: "/api/:path*",
-        destination: `${apiBaseUrl}/api/:path*`,
+        destination: `${apiUpstreamUrl}/api/:path*`,
       },
     ];
   },

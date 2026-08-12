@@ -2,8 +2,14 @@ use std::{env, net::IpAddr, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use axum::http::HeaderValue;
+use url::Url;
+
+use crate::app::AuthSettings;
 
 const SUPPORTED_ENVIRONMENTS: [&str; 3] = ["local", "test", "production"];
+const MINIMUM_HMAC_KEY_BYTES: usize = 32;
+const INSECURE_SECRET_MARKERS: [&str; 3] =
+    ["local-only", "change-this", "__set_in_secret_manager__"];
 
 #[derive(Clone)]
 pub struct Config {
@@ -12,15 +18,13 @@ pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub web_origin: HeaderValue,
-    pub auth: bycard_api::app::AuthSettings,
+    pub auth: AuthSettings,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self> {
         let app_env = required("APP_ENV")?;
-        if !SUPPORTED_ENVIRONMENTS.contains(&app_env.as_str()) {
-            bail!("APP_ENV must be one of: local, test, production");
-        }
+        validate_environment(&app_env)?;
 
         let bind_address = required("API_HOST")?
             .parse()
@@ -28,18 +32,15 @@ impl Config {
         let port = required("API_PORT")?
             .parse()
             .context("API_PORT must be a valid port")?;
-        let database_url = required("DATABASE_URL")?;
-        if !database_url.starts_with("postgres://") && !database_url.starts_with("postgresql://") {
-            bail!("DATABASE_URL must use the postgres or postgresql scheme");
-        }
+        let database_url = validate_database_url(&app_env, &required("DATABASE_URL")?)?;
 
         let web_origin = validate_web_origin(&app_env, &required("WEB_ORIGIN")?)?;
-        let hmac_key = required("SESSION_HMAC_KEY")?.into_bytes();
+        let hmac_key = validate_session_hmac_key(&app_env, &required("SESSION_HMAC_KEY")?)?;
         let session_ttl = duration("SESSION_TTL_SECONDS")?;
         let idle_ttl = duration("SESSION_IDLE_TTL_SECONDS")?;
         let touch_interval = duration("SESSION_TOUCH_INTERVAL_SECONDS")?;
         let csrf_ttl = duration("CSRF_TTL_SECONDS")?;
-        let auth = bycard_api::app::AuthSettings {
+        let auth = AuthSettings {
             secure_cookie: app_env == "production",
             hmac_key,
             session_ttl,
@@ -63,17 +64,79 @@ impl Config {
     }
 }
 
+pub fn database_url_from_env() -> Result<String> {
+    let app_env = required("APP_ENV")?;
+    validate_environment(&app_env)?;
+    validate_database_url(&app_env, &required("DATABASE_URL")?)
+}
+
+fn validate_environment(app_env: &str) -> Result<()> {
+    if !SUPPORTED_ENVIRONMENTS.contains(&app_env) {
+        bail!("APP_ENV must be one of: local, test, production");
+    }
+    Ok(())
+}
+
+fn validate_database_url(app_env: &str, raw_url: &str) -> Result<String> {
+    let url = Url::parse(raw_url).context("DATABASE_URL must be a valid URL")?;
+    if !matches!(url.scheme(), "postgres" | "postgresql") {
+        bail!("DATABASE_URL must use the postgres or postgresql scheme");
+    }
+    if url.host_str().is_none() || url.path().trim_matches('/').is_empty() {
+        bail!("DATABASE_URL must include a host and database name");
+    }
+
+    if app_env == "production" {
+        let ssl_modes = url
+            .query_pairs()
+            .filter_map(|(key, value)| (key == "sslmode").then_some(value))
+            .collect::<Vec<_>>();
+        if ssl_modes.len() != 1 || ssl_modes[0] != "verify-full" {
+            bail!("DATABASE_URL must set sslmode=verify-full in production");
+        }
+    }
+
+    Ok(raw_url.to_owned())
+}
+
 fn validate_web_origin(app_env: &str, raw_origin: &str) -> Result<HeaderValue> {
-    let is_https = raw_origin.starts_with("https://");
-    if !raw_origin.starts_with("http://") && !is_https {
+    let url = Url::parse(raw_origin).context("WEB_ORIGIN must be a valid URL")?;
+    let is_https = url.scheme() == "https";
+    if url.scheme() != "http" && !is_https {
         bail!("WEB_ORIGIN must use the http or https scheme");
     }
     if app_env == "production" && !is_https {
         bail!("WEB_ORIGIN must use https in production");
     }
-    raw_origin
+    if url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        bail!("WEB_ORIGIN must contain only scheme, host, and optional port");
+    }
+
+    url.origin()
+        .ascii_serialization()
         .parse()
         .context("WEB_ORIGIN must be a valid HTTP header value")
+}
+
+fn validate_session_hmac_key(app_env: &str, raw_key: &str) -> Result<Vec<u8>> {
+    if raw_key.len() < MINIMUM_HMAC_KEY_BYTES {
+        bail!("SESSION_HMAC_KEY must contain at least 32 bytes");
+    }
+    let normalized_key = raw_key.to_ascii_lowercase();
+    if app_env == "production"
+        && INSECURE_SECRET_MARKERS
+            .iter()
+            .any(|marker| normalized_key.contains(marker))
+    {
+        bail!("SESSION_HMAC_KEY must be replaced with a random production secret");
+    }
+    Ok(raw_key.as_bytes().to_vec())
 }
 
 fn duration(name: &str) -> Result<Duration> {
@@ -97,16 +160,56 @@ fn required(name: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_web_origin;
+    use super::{validate_database_url, validate_session_hmac_key, validate_web_origin};
 
     #[test]
-    fn production_rejects_plain_http_origins() {
+    fn production_requires_https_origin_without_extra_components() {
         assert!(validate_web_origin("production", "http://localhost:3000").is_err());
+        assert!(validate_web_origin("production", "https://bycard.example/path").is_err());
+        assert!(validate_web_origin("production", "https://bycard.example?debug=1").is_err());
+        assert!(validate_web_origin("production", "https://user@bycard.example").is_err());
+        assert_eq!(
+            validate_web_origin("production", "https://bycard.example/")
+                .expect("a valid production origin should be accepted"),
+            "https://bycard.example"
+        );
     }
 
     #[test]
     fn local_accepts_http_but_rejects_non_http_schemes() {
         assert!(validate_web_origin("local", "http://localhost:3000").is_ok());
         assert!(validate_web_origin("local", "javascript://unsafe").is_err());
+    }
+
+    #[test]
+    fn production_database_requires_full_certificate_verification() {
+        let base_url = "postgresql://user:password@db.example/bycard";
+        assert!(validate_database_url("production", base_url).is_err());
+        assert!(
+            validate_database_url("production", &format!("{base_url}?sslmode=require")).is_err()
+        );
+        assert!(
+            validate_database_url("production", &format!("{base_url}?sslmode=verify-full")).is_ok()
+        );
+        assert!(validate_database_url("local", base_url).is_ok());
+    }
+
+    #[test]
+    fn production_rejects_default_or_short_session_secrets() {
+        assert!(validate_session_hmac_key("production", "short").is_err());
+        assert!(
+            validate_session_hmac_key(
+                "production",
+                "local-only-change-this-key-before-any-deploy-32-bytes"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_session_hmac_key(
+                "production",
+                "YlYyMVBHMEJYeVF5d3Vycm9XcEx3T1h2OE9Td3dpTnJOTG90Q1B1eg"
+            )
+            .is_ok()
+        );
     }
 }

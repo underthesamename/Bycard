@@ -1,7 +1,5 @@
-mod config;
-
 use anyhow::{Context, Result};
-use config::Config;
+use bycard_api::config::Config;
 use tokio::{net::TcpListener, signal};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
