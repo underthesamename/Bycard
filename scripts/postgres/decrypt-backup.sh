@@ -47,8 +47,12 @@ fi
 umask 077
 temporary_backup=$(mktemp "$backup_directory/.bycard-decrypted.XXXXXX")
 temporary_checksum=$(mktemp "$backup_directory/.bycard-decrypted-checksum.XXXXXX")
+temporary_gnupg_home=$(mktemp -d "$backup_directory/.bycard-gnupg.XXXXXX")
+export GNUPGHOME="$temporary_gnupg_home"
 published_backup=false
 cleanup() {
+    gpgconf --kill gpg-agent >/dev/null 2>&1 || true
+    rm -rf -- "$temporary_gnupg_home"
     rm -f -- "$temporary_backup" "$temporary_checksum"
     if [ "$published_backup" = true ] && [ ! -f "$BACKUP_FILE.sha256" ]; then
         rm -f -- "$BACKUP_FILE"
@@ -75,5 +79,6 @@ published_backup=true
 mv "$temporary_checksum" "$BACKUP_FILE.sha256"
 published_backup=false
 
+cleanup
 trap - EXIT HUP INT TERM
 printf '%s\n' "$BACKUP_FILE"

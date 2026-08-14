@@ -58,8 +58,12 @@ esac
 umask 077
 temporary_backup=$(mktemp "$encrypted_directory/.bycard-encrypted.XXXXXX")
 temporary_checksum=$(mktemp "$encrypted_directory/.bycard-encrypted-checksum.XXXXXX")
+temporary_gnupg_home=$(mktemp -d "$encrypted_directory/.bycard-gnupg.XXXXXX")
+export GNUPGHOME="$temporary_gnupg_home"
 published_backup=false
 cleanup() {
+    gpgconf --kill gpg-agent >/dev/null 2>&1 || true
+    rm -rf -- "$temporary_gnupg_home"
     rm -f -- "$temporary_backup" "$temporary_checksum"
     if [ "$published_backup" = true ] && [ ! -f "$encrypted_checksum" ]; then
         rm -f -- "$encrypted_backup"
@@ -97,5 +101,6 @@ published_backup=true
 mv "$temporary_checksum" "$encrypted_checksum"
 published_backup=false
 
+cleanup
 trap - EXIT HUP INT TERM
 printf '%s\n' "$encrypted_backup"
