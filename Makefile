@@ -5,7 +5,7 @@ include .env
 export
 endif
 
-.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check check-config api-image migrate import-demo import-tcgdex
+.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check check-config api-image database-operations-image migrate import-demo import-tcgdex verify-database
 
 setup: install db
 
@@ -52,11 +52,17 @@ check-config:
 api-image:
 	docker build --tag bycard-api:local .
 
+database-operations-image:
+	docker build --target operations --tag bycard-database-operations:local .
+
 migrate:
-	cargo run -p bycard-api --bin migrate
+	cargo run -p bycard-api --bin database-operations -- migrate
 
 import-demo: migrate
-	cargo run -p bycard-api --bin import-demo-catalog
+	cargo run -p bycard-api --bin database-operations -- import-demo
 
 import-tcgdex: migrate
-	cargo run -p bycard-api --bin import-tcgdex -- $(TCGDEX_SET_IDS)
+	cargo run -p bycard-api --bin database-operations -- import-tcgdex $(TCGDEX_SET_IDS)
+
+verify-database:
+	cargo run -p bycard-api --bin database-operations -- verify $(TCGDEX_SET_IDS)

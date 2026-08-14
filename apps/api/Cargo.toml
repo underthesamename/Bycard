@@ -11,16 +11,8 @@ name = "bycard-api"
 path = "src/main.rs"
 
 [[bin]]
-name = "migrate"
-path = "src/bin/migrate.rs"
-
-[[bin]]
-name = "import-demo-catalog"
-path = "src/bin/import_demo_catalog.rs"
-
-[[bin]]
-name = "import-tcgdex"
-path = "src/bin/import_tcgdex.rs"
+name = "database-operations"
+path = "src/bin/database_operations.rs"
 
 [[bin]]
 name = "check-config"

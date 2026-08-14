@@ -63,6 +63,14 @@ pub async fn fetch_catalog(set_ids: &[String]) -> Result<CatalogFixture> {
     })
 }
 
+pub fn external_set_keys(set_ids: &[String]) -> Result<Vec<String>> {
+    validate_set_ids(set_ids)?;
+    set_ids
+        .iter()
+        .map(|set_id| normalize_key(set_id).map(|key| format!("tcgdex-{key}")))
+        .collect()
+}
+
 fn validate_set_ids(set_ids: &[String]) -> Result<()> {
     if set_ids.is_empty() || set_ids.len() > MAX_SET_COUNT {
         bail!("provide between 1 and {MAX_SET_COUNT} TCGdex set IDs");

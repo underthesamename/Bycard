@@ -9,3 +9,5 @@ apps/api/*
 !apps/api/Cargo.toml
 !apps/api/src
 !apps/api/src/**
+!apps/api/migrations
+!apps/api/migrations/**
