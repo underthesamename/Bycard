@@ -230,12 +230,13 @@ jobs:
             echo "backup role unexpectedly modified catalog data" >&2
             exit 1
           fi
-      - name: Create and restore a logical backup
+      - name: Encrypt, decrypt, and restore a logical backup
         env:
           PGUSER: bycard_backup
           PGPASSWORD: bycard-backup-ci-only
           BACKUP_DIRECTORY: /backup
           BACKUP_NAME: bycard-ci.dump
+          BACKUP_ENCRYPTION_KEY: bycard-ci-backup-key-with-at-least-thirty-two-characters
         run: |
           mkdir -p "$RUNNER_TEMP/bycard-backup"
           docker run --rm --network host \
@@ -253,6 +254,19 @@ jobs:
             --volume "$RUNNER_TEMP/bycard-backup:/backup" \
             postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
             /scripts/backup.sh
+
+          backup_file="$RUNNER_TEMP/bycard-backup/bycard-ci.dump"
+          encrypted_backup_file="$backup_file.gpg"
+          decrypted_backup_file="$RUNNER_TEMP/bycard-backup/bycard-ci-restored.dump"
+          BACKUP_FILE="$backup_file" \
+            ENCRYPTED_BACKUP_FILE="$encrypted_backup_file" \
+            MAX_ENCRYPTED_BACKUP_BYTES=33554432 \
+            scripts/postgres/encrypt-backup.sh
+          rm -f -- "$backup_file" "$backup_file.sha256"
+          ENCRYPTED_BACKUP_FILE="$encrypted_backup_file" \
+            BACKUP_FILE="$decrypted_backup_file" \
+            scripts/postgres/decrypt-backup.sh
+
           docker run --rm --network host \
             --env PGHOST \
             --env PGPORT \
@@ -270,7 +284,7 @@ jobs:
             --env PGPASSWORD=bycard-owner-ci-only \
             --env PGSSLMODE \
             --env PGCHANNELBINDING \
-            --env BACKUP_FILE=/backup/bycard-ci.dump \
+            --env BACKUP_FILE=/backup/bycard-ci-restored.dump \
             --volume "$GITHUB_WORKSPACE/scripts/postgres:/scripts:ro" \
             --volume "$RUNNER_TEMP/bycard-backup:/backup:ro" \
             postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \

@@ -75,7 +75,7 @@ docker run --rm \
 
 Em produção, `DATABASE_URL` e `DATABASE_MIGRATION_URL` devem usar papéis diferentes. O comando de migration concede à API somente operações de dados e ao papel de backup somente leitura. A credencial proprietária não entra no container da API.
 
-O workflow manual **Database release** aplica migrations, importa as coleções iniciais de forma idempotente e verifica o estado persistido antes do deploy da aplicação. Provisionamento, backup, restore e rollback estão documentados em [PostgreSQL de produção](docs/operations/postgresql.md).
+O workflow manual **Database release** aplica migrations, importa as coleções iniciais de forma idempotente e verifica o estado persistido antes do deploy da aplicação. A operação inicial usa Neon Free e um workflow diário que publica somente backups criptografados, mantendo custo zero dentro das cotas documentadas. Provisionamento, limites, restore e rollback estão em [PostgreSQL de produção](docs/operations/postgresql.md).
 
 ## Executar localmente
 
