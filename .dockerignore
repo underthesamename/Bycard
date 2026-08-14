@@ -1,0 +1,11 @@
+*
+!Dockerfile
+!Cargo.toml
+!Cargo.lock
+!apps
+apps/*
+!apps/api
+apps/api/*
+!apps/api/Cargo.toml
+!apps/api/src
+!apps/api/src/**
