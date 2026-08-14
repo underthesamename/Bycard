@@ -42,6 +42,7 @@ jobs:
           set -eu
           mkdir -p "$RUNNER_TEMP/bycard-backup"
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             --env APP_ENV \
             --env PGHOST \
             --env PGPORT \

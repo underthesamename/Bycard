@@ -240,6 +240,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bycard-backup"
           docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
             --env APP_ENV \
             --env PGHOST \
             --env PGPORT \
