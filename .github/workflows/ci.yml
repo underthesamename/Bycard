@@ -21,6 +21,15 @@ jobs:
           node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Validate deployment files
+        run: |
+          set -eu
+          bash -n scripts/smoke-production.sh
+          apps/web/node_modules/.bin/prettier --check \
+            .github/workflows/production-smoke.yml \
+            docs/operations/application-deployment.md \
+            render.yaml
+          python3 -c 'import tomllib; tomllib.load(open("netlify.toml", "rb"))'
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

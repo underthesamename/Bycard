@@ -5,7 +5,7 @@ include .env
 export
 endif
 
-.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check check-config api-image database-operations-image migrate import-demo import-tcgdex verify-database
+.PHONY: setup install db db-down dev dev-api dev-web test lint format format-check check-config api-image database-operations-image migrate import-demo import-tcgdex verify-database smoke-production
 
 setup: install db
 
@@ -66,3 +66,6 @@ import-tcgdex: migrate
 
 verify-database:
 	cargo run -p bycard-api --bin database-operations -- verify $(TCGDEX_SET_IDS)
+
+smoke-production:
+	./scripts/smoke-production.sh

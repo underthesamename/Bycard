@@ -1,0 +1,35 @@
+name: Production smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_origin:
+        description: Public HTTPS origin of the Netlify frontend
+        required: true
+        type: string
+      api_origin:
+        description: Public HTTPS origin of the Render API
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bycard-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WEB_ORIGIN: ${{ inputs.web_origin }}
+      API_ORIGIN: ${{ inputs.api_origin }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Verify public application
+        run: ./scripts/smoke-production.sh

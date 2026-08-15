@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+services:
+  - type: web
+    name: bycard-api
+    runtime: docker
+    plan: free
+    region: virginia
+    branch: main
+    autoDeployTrigger: off
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 10000
+      - key: WEB_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_HMAC_KEY
+        generateValue: true
+      - key: SESSION_TTL_SECONDS
+        value: 2592000
+      - key: SESSION_IDLE_TTL_SECONDS
+        value: 604800
+      - key: SESSION_TOUCH_INTERVAL_SECONDS
+        value: 300
+      - key: CSRF_TTL_SECONDS
+        value: 1800
+      - key: RUST_LOG
+        value: bycard_api=info,tower_http=info

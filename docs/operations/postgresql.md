@@ -12,7 +12,7 @@ Use endpoint direto, sem pooler, para migrations e `pg_dump`. A API também usa 
 
 ## Provisionamento
 
-1. Crie o projeto na mesma região escolhida para a API.
+1. Crie o projeto na região AWS US East (N. Virginia), a mesma definida para a API no Render.
 2. Mantenha o plano **Free** e não cadastre uma forma de pagamento.
 3. Selecione PostgreSQL 18 e crie o banco `bycard` com o papel proprietário padrão do projeto.
 4. Crie os papéis restritos por SQL, não pelo painel. Papéis criados pelo painel do Neon recebem associação a `neon_superuser` e não servem para aplicação ou backup.
