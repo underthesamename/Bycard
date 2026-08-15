@@ -6,12 +6,12 @@ services:
     runtime: docker
     plan: free
     region: virginia
+    repo: https://github.com/underthesamename/Bycard
     branch: main
     autoDeployTrigger: off
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health/ready
-    maxShutdownDelaySeconds: 30
     envVars:
       - key: APP_ENV
         value: production
