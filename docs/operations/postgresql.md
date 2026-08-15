@@ -52,6 +52,10 @@ Crie também o environment `production-backup`, limitado à branch `main`, sem a
 - `PGPASSWORD`: senha exclusiva do papel de backup;
 - `BACKUP_ENCRYPTION_KEY`: chave aleatória de pelo menos 32 caracteres.
 
+O job fixa `PGSSLMODE=verify-full`, `PGSSLROOTCERT=system` e
+`PGCHANNELBINDING=require`. Assim, o cliente PostgreSQL 18 usa as autoridades
+certificadoras do sistema, valida o hostname do endpoint e exige channel binding.
+
 Gere a chave fora do repositório e guarde outra cópia em um gerenciador de senhas. Sem ela, os artifacts são irrecuperáveis:
 
 ```bash
