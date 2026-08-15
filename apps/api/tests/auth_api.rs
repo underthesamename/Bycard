@@ -93,6 +93,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         duplicate.body["error"]["code"],
         "account_already_registered"
     );
+    verify_username_uniqueness(pool, &app).await?;
 
     let valid_session = get(&app, "/api/v1/auth/me", Some(&cookie)).await?;
     assert_eq!(valid_session.status, StatusCode::OK);
@@ -162,6 +163,83 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
     verify_expired_session(pool).await?;
     verify_rate_limit(pool).await?;
     verify_production_cookie(pool).await?;
+    Ok(())
+}
+
+async fn verify_username_uniqueness(pool: &PgPool, app: &Router) -> Result<()> {
+    let normalized_duplicate = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Outra colecionadora",
+            "username": "  ANA.TCG  ",
+            "email": "outra-ana@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    )
+    .await?;
+    assert_eq!(normalized_duplicate.status, StatusCode::CONFLICT);
+    assert_eq!(
+        normalized_duplicate.body["error"]["code"],
+        "account_already_registered"
+    );
+
+    let first_registration = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Primeira colecionadora",
+            "username": "Corrida.TCG",
+            "email": "primeira-corrida@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    );
+    let second_registration = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Segunda colecionadora",
+            "username": " corrida.tcg ",
+            "email": "segunda-corrida@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    );
+    let (first_registration, second_registration) =
+        tokio::join!(first_registration, second_registration);
+    let registrations = [first_registration?, second_registration?];
+
+    assert_eq!(
+        registrations
+            .iter()
+            .filter(|response| response.status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        registrations
+            .iter()
+            .filter(|response| response.status == StatusCode::CONFLICT)
+            .count(),
+        1
+    );
+    let conflict = registrations
+        .iter()
+        .find(|response| response.status == StatusCode::CONFLICT)
+        .context("one concurrent registration must be rejected")?;
+    assert_eq!(conflict.body["error"]["code"], "account_already_registered");
+
+    let stored_users =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE username = $1")
+            .bind("corrida.tcg")
+            .fetch_one(pool)
+            .await?;
+    assert_eq!(stored_users, 1);
     Ok(())
 }
 
