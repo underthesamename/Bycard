@@ -1,0 +1,9 @@
+[build]
+  command = "pnpm build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "24.18.0"
+
+[context.production.environment]
+  APP_ENV = "production"

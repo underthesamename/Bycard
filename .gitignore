@@ -4,6 +4,7 @@
 !.env.production.example
 !.env.database-operations.example
 .next/
+.netlify/
 node_modules/
 target/
 coverage/
