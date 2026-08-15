@@ -33,13 +33,15 @@ O comando de migration concede os acessos depois de aplicar o schema:
 
 ## Segredos e release
 
-Crie o environment `production` no GitHub e configure:
+Crie o environment `production` no GitHub, restrinja-o à branch `main` e configure:
 
 - secret `DATABASE_URL`: URL direta do papel `bycard_app`;
 - secret `DATABASE_MIGRATION_URL`: URL direta do proprietário do banco;
 - variable `DATABASE_BACKUP_ROLE`: `bycard_backup`.
 
 A API recebe somente `DATABASE_URL`. Nunca injete `DATABASE_MIGRATION_URL`, a senha de backup ou credenciais do proprietário no serviço web.
+
+O workflow também recusa execução fora de `main`. A restrição do environment é uma segunda camada contra uma branch não revisada acessar a credencial proprietária. Quando houver outro mantenedor disponível, configure aprovação manual para esse environment.
 
 Crie também o environment `production-backup`, limitado à branch `main`, sem aprovação manual, e configure estes secrets:
 
