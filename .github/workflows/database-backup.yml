@@ -36,6 +36,7 @@ jobs:
           PGUSER: ${{ secrets.PGUSER }}
           PGPASSWORD: ${{ secrets.PGPASSWORD }}
           PGSSLMODE: verify-full
+          PGSSLROOTCERT: system
           PGCHANNELBINDING: require
           BACKUP_DIRECTORY: /backup
         run: |
@@ -50,6 +51,7 @@ jobs:
             --env PGUSER \
             --env PGPASSWORD \
             --env PGSSLMODE \
+            --env PGSSLROOTCERT \
             --env PGCHANNELBINDING \
             --env BACKUP_DIRECTORY \
             --env BACKUP_NAME \
