@@ -21,6 +21,12 @@ pub struct Config {
     pub auth: AuthSettings,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct DatabaseRoles {
+    pub application: String,
+    pub backup: String,
+}
+
 impl Config {
     pub fn from_env() -> Result<Self> {
         let app_env = required("APP_ENV")?;
@@ -68,6 +74,58 @@ pub fn database_url_from_env() -> Result<String> {
     validate_database_url(&app_env, &required("DATABASE_URL")?)
 }
 
+pub fn migration_database_url_from_env() -> Result<String> {
+    let app_env = required("APP_ENV")?;
+    validate_environment(&app_env)?;
+
+    let application_url = required("DATABASE_URL")?;
+    validate_database_url(&app_env, &application_url)?;
+
+    let migration_url = match env::var("DATABASE_MIGRATION_URL") {
+        Ok(value) if !value.trim().is_empty() => value,
+        Ok(_) if app_env == "production" => bail!("DATABASE_MIGRATION_URL cannot be empty"),
+        Ok(_) => application_url.clone(),
+        Err(env::VarError::NotPresent) if app_env != "production" => application_url.clone(),
+        Err(env::VarError::NotPresent) => bail!("DATABASE_MIGRATION_URL is required"),
+        Err(error) => return Err(error).context("DATABASE_MIGRATION_URL is not valid Unicode"),
+    };
+    validate_database_url(&app_env, &migration_url)?;
+
+    if app_env == "production" {
+        validate_distinct_database_roles(&application_url, &migration_url)?;
+    }
+
+    Ok(migration_url)
+}
+
+pub fn database_roles_from_env() -> Result<Option<DatabaseRoles>> {
+    let app_env = required("APP_ENV")?;
+    validate_environment(&app_env)?;
+
+    let backup_role = match env::var("DATABASE_BACKUP_ROLE") {
+        Ok(value) if !value.trim().is_empty() => value,
+        Ok(_) if app_env == "production" => bail!("DATABASE_BACKUP_ROLE cannot be empty"),
+        Ok(_) => return Ok(None),
+        Err(env::VarError::NotPresent) if app_env != "production" => return Ok(None),
+        Err(env::VarError::NotPresent) => bail!("DATABASE_BACKUP_ROLE is required"),
+        Err(error) => return Err(error).context("DATABASE_BACKUP_ROLE is not valid Unicode"),
+    };
+
+    let application_url =
+        Url::parse(&database_url_from_env()?).context("DATABASE_URL must be a valid URL")?;
+    let application_role = application_url.username().to_owned();
+    validate_database_role("DATABASE_URL username", &application_role)?;
+    validate_database_role("DATABASE_BACKUP_ROLE", &backup_role)?;
+    if application_role == backup_role {
+        bail!("application and backup database roles must be different");
+    }
+
+    Ok(Some(DatabaseRoles {
+        application: application_role,
+        backup: backup_role,
+    }))
+}
+
 fn validate_environment(app_env: &str) -> Result<()> {
     if !SUPPORTED_ENVIRONMENTS.contains(&app_env) {
         bail!("APP_ENV must be one of: local, test, production");
@@ -93,6 +151,9 @@ fn validate_database_url(app_env: &str, raw_url: &str) -> Result<String> {
     }
 
     if app_env == "production" {
+        if url.username().is_empty() || url.password().is_none() {
+            bail!("production database URLs must include username and password");
+        }
         let ssl_modes = url
             .query_pairs()
             .filter_map(|(key, value)| (key == "sslmode").then_some(value))
@@ -103,6 +164,33 @@ fn validate_database_url(app_env: &str, raw_url: &str) -> Result<String> {
     }
 
     Ok(raw_url.to_owned())
+}
+
+fn validate_distinct_database_roles(application_url: &str, migration_url: &str) -> Result<()> {
+    let application_url =
+        Url::parse(application_url).context("DATABASE_URL must be a valid URL")?;
+    let migration_url =
+        Url::parse(migration_url).context("DATABASE_MIGRATION_URL must be a valid URL")?;
+
+    if application_url.username() == migration_url.username() {
+        bail!("DATABASE_URL and DATABASE_MIGRATION_URL must use different database roles");
+    }
+
+    Ok(())
+}
+
+fn validate_database_role(field: &str, role: &str) -> Result<()> {
+    let mut bytes = role.bytes();
+    let Some(first) = bytes.next() else {
+        bail!("{field} must be a valid PostgreSQL role name");
+    };
+    if !(first.is_ascii_lowercase() || first == b'_')
+        || role.len() > 63
+        || !bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        bail!("{field} must use lowercase letters, digits, and underscores");
+    }
+    Ok(())
 }
 
 fn validate_web_origin(app_env: &str, raw_origin: &str) -> Result<HeaderValue> {
@@ -167,7 +255,8 @@ fn required(name: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        validate_database_url, validate_port, validate_session_hmac_key, validate_web_origin,
+        validate_database_role, validate_database_url, validate_distinct_database_roles,
+        validate_port, validate_session_hmac_key, validate_web_origin,
     };
 
     #[test]
@@ -208,6 +297,40 @@ mod tests {
             validate_database_url("production", &format!("{base_url}?sslmode=verify-full")).is_ok()
         );
         assert!(validate_database_url("local", base_url).is_ok());
+    }
+
+    #[test]
+    fn production_database_requires_authenticated_distinct_roles() {
+        assert!(
+            validate_database_url(
+                "production",
+                "postgresql://db.example/bycard?sslmode=verify-full"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_distinct_database_roles(
+                "postgresql://bycard_app:secret@db.example/bycard?sslmode=verify-full",
+                "postgresql://bycard_app:other@db.example/bycard?sslmode=verify-full"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_distinct_database_roles(
+                "postgresql://bycard_app:secret@db.example/bycard?sslmode=verify-full",
+                "postgresql://bycard_owner:other@db.example/bycard?sslmode=verify-full"
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn database_roles_use_safe_portable_identifiers() {
+        assert!(validate_database_role("role", "bycard_app").is_ok());
+        assert!(validate_database_role("role", "owner2").is_ok());
+        assert!(validate_database_role("role", "Bycard-App").is_err());
+        assert!(validate_database_role("role", "1owner").is_err());
+        assert!(validate_database_role("role", "role;drop_table").is_err());
     }
 
     #[test]

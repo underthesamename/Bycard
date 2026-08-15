@@ -1,0 +1,66 @@
+name: Database release
+
+on:
+  workflow_dispatch:
+    inputs:
+      catalog_set_ids:
+        description: Space-separated TCGdex set IDs to initialize or refresh
+        required: true
+        default: me05 me01 sv09 sv08.5
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bycard-production-database
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      APP_ENV: production
+      TCGDEX_SET_IDS: ${{ inputs.catalog_set_ids }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Build immutable database operations image
+        run: docker build --target operations --tag bycard-database-operations:${{ github.sha }} .
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          DATABASE_BACKUP_ROLE: ${{ vars.DATABASE_BACKUP_ROLE }}
+        run: |
+          set -eu
+          docker run --rm \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --env DATABASE_MIGRATION_URL \
+            --env DATABASE_BACKUP_ROLE \
+            bycard-database-operations:${{ github.sha }} migrate
+      - name: Initialize catalog idempotently
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -eu
+          docker run --rm \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --env TCGDEX_SET_IDS \
+            bycard-database-operations:${{ github.sha }} import-tcgdex
+      - name: Verify schema and catalog
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -eu
+          docker run --rm \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --env TCGDEX_SET_IDS \
+            bycard-database-operations:${{ github.sha }} verify

@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.4-alpine
+        image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
         env:
           POSTGRES_USER: bycard
           POSTGRES_PASSWORD: bycard-ci-only
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.4-alpine
+        image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
         env:
           POSTGRES_USER: bycard
           POSTGRES_PASSWORD: bycard-ci-only
@@ -133,3 +133,164 @@ jobs:
             sleep 1
           done
           exit 1
+
+  database-operations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+        env:
+          POSTGRES_USER: bycard_owner
+          POSTGRES_PASSWORD: bycard-owner-ci-only
+          POSTGRES_DB: bycard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bycard_owner -d bycard"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGSSLMODE: disable
+      PGCHANNELBINDING: disable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build database operations image
+        run: docker build --target operations --tag bycard-database-operations:ci .
+      - name: Create restricted database roles
+        env:
+          PGDATABASE: bycard
+          PGUSER: bycard_owner
+          PGPASSWORD: bycard-owner-ci-only
+        run: |
+          docker run --rm --network host \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE \
+            --env PGUSER \
+            --env PGPASSWORD \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            psql --no-psqlrc --set=ON_ERROR_STOP=1 --command="CREATE ROLE bycard_app LOGIN PASSWORD 'bycard-app-ci-only'; CREATE ROLE bycard_backup LOGIN PASSWORD 'bycard-backup-ci-only'"
+      - name: Apply migrations and import catalog idempotently
+        env:
+          DATABASE_URL: postgresql://bycard_app:bycard-app-ci-only@127.0.0.1:5432/bycard
+          DATABASE_MIGRATION_URL: postgresql://bycard_owner:bycard-owner-ci-only@127.0.0.1:5432/bycard
+          DATABASE_BACKUP_ROLE: bycard_backup
+        run: |
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --env DATABASE_MIGRATION_URL \
+            --env DATABASE_BACKUP_ROLE \
+            bycard-database-operations:ci migrate
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --env DATABASE_MIGRATION_URL \
+            --env DATABASE_BACKUP_ROLE \
+            bycard-database-operations:ci migrate
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --volume "$GITHUB_WORKSPACE/fixtures/demo-catalog:/fixtures:ro" \
+            bycard-database-operations:ci import-demo /fixtures/catalog.json
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            --volume "$GITHUB_WORKSPACE/fixtures/demo-catalog:/fixtures:ro" \
+            bycard-database-operations:ci import-demo /fixtures/catalog.json
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL \
+            bycard-database-operations:ci verify
+      - name: Verify least-privilege database roles
+        run: |
+          if docker run --rm --network host \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE=bycard \
+            --env PGUSER=bycard_app \
+            --env PGPASSWORD=bycard-app-ci-only \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            psql --no-psqlrc --set=ON_ERROR_STOP=1 --command='BEGIN; CREATE TABLE forbidden_app_table (id INTEGER); ROLLBACK;'; then
+            echo "application role unexpectedly created a table" >&2
+            exit 1
+          fi
+          if docker run --rm --network host \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE=bycard \
+            --env PGUSER=bycard_backup \
+            --env PGPASSWORD=bycard-backup-ci-only \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            psql --no-psqlrc --set=ON_ERROR_STOP=1 --command='BEGIN; UPDATE sets SET name = name; ROLLBACK;'; then
+            echo "backup role unexpectedly modified catalog data" >&2
+            exit 1
+          fi
+      - name: Encrypt, decrypt, and restore a logical backup
+        env:
+          PGUSER: bycard_backup
+          PGPASSWORD: bycard-backup-ci-only
+          BACKUP_DIRECTORY: /backup
+          BACKUP_NAME: bycard-ci.dump
+          BACKUP_ENCRYPTION_KEY: bycard-ci-backup-key-with-at-least-thirty-two-characters
+        run: |
+          mkdir -p "$RUNNER_TEMP/bycard-backup"
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            --env APP_ENV \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE=bycard \
+            --env PGUSER \
+            --env PGPASSWORD \
+            --env PGSSLMODE \
+            --env PGCHANNELBINDING \
+            --env BACKUP_DIRECTORY \
+            --env BACKUP_NAME \
+            --volume "$GITHUB_WORKSPACE/scripts/postgres:/scripts:ro" \
+            --volume "$RUNNER_TEMP/bycard-backup:/backup" \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            /scripts/backup.sh
+
+          backup_file="$RUNNER_TEMP/bycard-backup/bycard-ci.dump"
+          encrypted_backup_file="$backup_file.gpg"
+          decrypted_backup_file="$RUNNER_TEMP/bycard-backup/bycard-ci-restored.dump"
+          BACKUP_FILE="$backup_file" \
+            ENCRYPTED_BACKUP_FILE="$encrypted_backup_file" \
+            MAX_ENCRYPTED_BACKUP_BYTES=33554432 \
+            scripts/postgres/encrypt-backup.sh
+          rm -f -- "$backup_file" "$backup_file.sha256"
+          ENCRYPTED_BACKUP_FILE="$encrypted_backup_file" \
+            BACKUP_FILE="$decrypted_backup_file" \
+            scripts/postgres/decrypt-backup.sh
+
+          docker run --rm --network host \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE=postgres \
+            --env PGUSER=bycard_owner \
+            --env PGPASSWORD=bycard-owner-ci-only \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            psql --no-psqlrc --set=ON_ERROR_STOP=1 --command='CREATE DATABASE bycard_restore_test'
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE=bycard_restore_test \
+            --env PGUSER=bycard_owner \
+            --env PGPASSWORD=bycard-owner-ci-only \
+            --env PGSSLMODE \
+            --env PGCHANNELBINDING \
+            --env BACKUP_FILE=/backup/bycard-ci-restored.dump \
+            --volume "$GITHUB_WORKSPACE/scripts/postgres:/scripts:ro" \
+            --volume "$RUNNER_TEMP/bycard-backup:/backup:ro" \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            /scripts/restore-empty-database.sh
+          docker run --rm --network host \
+            --env APP_ENV \
+            --env DATABASE_URL=postgresql://bycard_owner:bycard-owner-ci-only@127.0.0.1:5432/bycard_restore_test \
+            bycard-database-operations:ci verify

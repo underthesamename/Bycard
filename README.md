@@ -27,7 +27,7 @@ Os valores de `.env.example` são exclusivos para desenvolvimento local. Não os
 
 - `APP_ENV` deve ser `production`;
 - `WEB_ORIGIN` deve conter somente a origem HTTPS pública do frontend;
-- `DATABASE_URL` deve usar PostgreSQL com `sslmode=verify-full`;
+- `DATABASE_URL` deve usar o papel restrito da aplicação e PostgreSQL com `sslmode=verify-full`;
 - `SESSION_HMAC_KEY` deve ser um segredo aleatório com pelo menos 32 bytes;
 - `API_UPSTREAM_URL` é usada somente pelo servidor Next.js e deve apontar para a API por HTTPS.
 
@@ -61,6 +61,21 @@ docker run --rm \
 ```
 
 O processo valida toda a configuração antes de escutar conexões, responde a `SIGTERM` com encerramento gracioso e inclui um healthcheck em `/health/live`. Não inclua o arquivo real de variáveis no contexto do Docker nem no repositório.
+
+### Operações do banco
+
+Migrations e carga de catálogo usam uma imagem separada da API:
+
+```bash
+make database-operations-image
+docker run --rm \
+  --env-file /caminho/seguro/bycard-database-operations.env \
+  bycard-database-operations:local migrate
+```
+
+Em produção, `DATABASE_URL` e `DATABASE_MIGRATION_URL` devem usar papéis diferentes. O comando de migration concede à API somente operações de dados e ao papel de backup somente leitura. A credencial proprietária não entra no container da API.
+
+O workflow manual **Database release** aplica migrations, importa as coleções iniciais de forma idempotente e verifica o estado persistido antes do deploy da aplicação. A operação inicial usa Neon Free e um workflow diário que publica somente backups criptografados, mantendo custo zero dentro das cotas documentadas. Provisionamento, limites, restore e rollback estão em [PostgreSQL de produção](docs/operations/postgresql.md).
 
 ## Executar localmente
 
@@ -101,7 +116,7 @@ make import-tcgdex TCGDEX_SET_IDS="me01 me02"
 O importador aceita opcionalmente outro arquivo como primeiro argumento:
 
 ```bash
-cargo run -p bycard-api --bin import-demo-catalog -- caminho/catalog.json
+cargo run -p bycard-api --bin database-operations -- import-demo caminho/catalog.json
 ```
 
 ## Endereços
@@ -128,6 +143,7 @@ cargo build --workspace --locked
 
 ```bash
 make migrate
+make verify-database
 ```
 
 ## Segurança da autenticação

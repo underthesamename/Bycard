@@ -1,0 +1,110 @@
+name: Database backup
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: bycard-production-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-backup
+    env:
+      BACKUP_NAME: bycard-${{ github.run_id }}-${{ github.run_attempt }}.dump
+      BACKUP_ARTIFACT_NAME: bycard-database-backup
+      MAX_ENCRYPTED_BACKUP_BYTES: 33554432
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Create logical backup
+        env:
+          APP_ENV: production
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: ${{ secrets.PGPORT }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          PGSSLMODE: verify-full
+          PGCHANNELBINDING: require
+          BACKUP_DIRECTORY: /backup
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/bycard-backup"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env APP_ENV \
+            --env PGHOST \
+            --env PGPORT \
+            --env PGDATABASE \
+            --env PGUSER \
+            --env PGPASSWORD \
+            --env PGSSLMODE \
+            --env PGCHANNELBINDING \
+            --env BACKUP_DIRECTORY \
+            --env BACKUP_NAME \
+            --volume "$GITHUB_WORKSPACE/scripts/postgres:/scripts:ro" \
+            --volume "$RUNNER_TEMP/bycard-backup:/backup" \
+            postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+            /scripts/backup.sh
+      - name: Encrypt logical backup
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_FILE: ${{ runner.temp }}/bycard-backup/${{ env.BACKUP_NAME }}
+          ENCRYPTED_BACKUP_FILE: ${{ runner.temp }}/bycard-backup/${{ env.BACKUP_NAME }}.gpg
+        run: |
+          set -eu
+          cleanup_plaintext_backup() {
+            rm -f -- "$BACKUP_FILE" "$BACKUP_FILE.sha256"
+          }
+          trap cleanup_plaintext_backup EXIT HUP INT TERM
+
+          scripts/postgres/encrypt-backup.sh
+          cleanup_plaintext_backup
+          trap - EXIT HUP INT TERM
+          test ! -e "$BACKUP_FILE"
+          test -s "$ENCRYPTED_BACKUP_FILE"
+          test -s "$ENCRYPTED_BACKUP_FILE.sha256"
+      - name: Prune older database backup artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          stale_artifact_ids="$RUNNER_TEMP/bycard-stale-artifact-ids"
+
+          gh api \
+            --method GET \
+            --field name="$BACKUP_ARTIFACT_NAME" \
+            --field per_page=100 \
+            --jq '.artifacts | sort_by(.created_at) | reverse | .[6:] | .[].id' \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts" >"$stale_artifact_ids"
+
+          while IFS= read -r artifact_id; do
+            case "$artifact_id" in
+              "" | *[!0-9]*)
+                echo "GitHub returned an invalid artifact ID" >&2
+                exit 1
+                ;;
+            esac
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id" >/dev/null
+          done <"$stale_artifact_ids"
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.BACKUP_ARTIFACT_NAME }}
+          path: |
+            ${{ runner.temp }}/bycard-backup/${{ env.BACKUP_NAME }}.gpg
+            ${{ runner.temp }}/bycard-backup/${{ env.BACKUP_NAME }}.gpg.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
