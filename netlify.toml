@@ -7,3 +7,9 @@
 
 [context.production.environment]
   APP_ENV = "production"
+
+[[redirects]]
+  from = "https://bycard-app.netlify.app/*"
+  to = "https://bycard.online/:splat"
+  status = 301
+  force = true
