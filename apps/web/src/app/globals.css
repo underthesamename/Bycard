@@ -942,19 +942,6 @@ input:focus-visible {
   object-fit: cover;
 }
 
-.cover-code {
-  position: absolute;
-  right: 0.6rem;
-  bottom: 0.6rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 999px;
-  color: var(--white);
-  background: rgb(6 31 79 / 84%);
-  font-size: 0.68rem;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
 .collection-series,
 .collection-copy h3 {
   margin: 0;
@@ -1543,23 +1530,60 @@ input:focus-visible {
 
 .binder-book {
   position: relative;
+  isolation: isolate;
   padding: 1.15rem 1.15rem 1.15rem 3.5rem;
-  border-radius: 1.05rem;
-  background: var(--blue-1000);
-  box-shadow: 0 1.5rem 3rem rgb(1 23 62 / 38%);
+  border: 1px solid #30353f;
+  border-radius: var(--radius-lg);
+  background-color: #171a20;
+  background-image: linear-gradient(
+    115deg,
+    rgb(255 255 255 / 4%),
+    transparent 38%
+  );
+  box-shadow:
+    0 1.125rem 3.125rem rgb(31 43 68 / 16%),
+    0 0.25rem 0 #0c0e12,
+    inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+.binder-book::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0.4rem;
+  border: 1px dashed rgb(255 255 255 / 12%);
+  border-radius: calc(var(--radius-lg) - 0.25rem);
+  pointer-events: none;
+  content: "";
+}
+
+.binder-book::after {
+  position: absolute;
+  z-index: 0;
+  top: 1.55rem;
+  right: 0.66rem;
+  bottom: 1.55rem;
+  width: 0.6rem;
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: #c5ccd7;
+  box-shadow:
+    0.2rem 0 0 #8e96a3,
+    inset 0.1rem 0 0 rgb(255 255 255 / 55%);
+  pointer-events: none;
+  content: "";
 }
 
 .binder-spine {
   position: absolute;
+  z-index: 3;
   top: 0;
   bottom: 0;
   left: 1.35rem;
   width: 0.45rem;
   border-radius: 999px;
-  background: #8b909a;
+  background: linear-gradient(90deg, #555b66, #d7dbe2 46%, #747985 72%);
   box-shadow:
-    inset 0 0 0 1px #eceef2,
-    0.75rem 0 1rem rgb(0 20 54 / 28%);
+    inset 0 0 0 1px rgb(255 255 255 / 36%),
+    0.75rem 0 1rem rgb(0 0 0 / 28%);
 }
 
 .binder-spine::before,
@@ -1568,9 +1592,10 @@ input:focus-visible {
   left: -0.5rem;
   width: 1.45rem;
   height: 3.2rem;
-  border: 0.28rem solid #d9dce2;
+  border: 0.28rem solid #dfe3e9;
   border-right: 0;
   border-radius: 1rem 0 0 1rem;
+  filter: drop-shadow(0 0.22rem 0.18rem rgb(0 0 0 / 30%));
   content: "";
 }
 
@@ -1582,13 +1607,24 @@ input:focus-visible {
 }
 
 .binder-page {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
   padding: 1rem;
-  border-radius: 0.8rem;
-  background: rgb(239 247 255 / 88%);
-  box-shadow: inset 0 0 1.5rem rgb(117 167 219 / 34%);
+  border: 1px solid #f8f9fb;
+  border-radius: var(--radius-md);
+  background-color: #e9edf3;
+  background-image: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 72%),
+    transparent 42%
+  );
+  box-shadow:
+    0 0.3rem 0 #cbd1dc,
+    0 0.55rem 0 #aeb6c4,
+    inset 0 0 1.5rem rgb(72 89 118 / 16%);
 }
 
 .card-pocket,
@@ -1599,30 +1635,107 @@ input:focus-visible {
 }
 
 .card-pocket {
+  --card-sheen-x: 50%;
+  --card-sheen-y: 50%;
+  --card-tilt-x: 0deg;
+  --card-tilt-y: 0deg;
   position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 0.42rem;
-  padding: 0.7rem;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 88%);
+  z-index: 1;
+  display: block;
+  padding: 0.38rem;
+  overflow: visible;
+  border: 1px solid rgb(255 255 255 / 78%);
+  border-radius: var(--radius-md);
   color: var(--ink);
-  background: rgb(255 255 255 / 76%);
+  background: rgb(255 255 255 / 23%);
   box-shadow:
-    0 0.5rem 1rem rgb(7 42 101 / 15%),
-    inset 0 0 0 0.3rem rgb(255 255 255 / 34%);
+    0 0.25rem 1rem rgb(31 43 68 / 8%),
+    inset 0 1px 0 rgb(255 255 255 / 80%),
+    inset 0 -0.28rem 0 rgb(115 127 148 / 12%);
   text-align: left;
   cursor: pointer;
-  transition:
-    box-shadow 180ms ease-out,
-    background 180ms ease-out;
+  perspective: 52rem;
 }
 
-.card-pocket:hover {
-  background: var(--white);
+.card-pocket::before,
+.card-pocket::after {
+  position: absolute;
+  z-index: 2;
+  left: 0.32rem;
+  right: 0.32rem;
+  pointer-events: none;
+  content: "";
+}
+
+.card-pocket::before {
+  bottom: 0.18rem;
+  height: 0.46rem;
+  border: 1px solid rgb(255 255 255 / 56%);
+  border-top-color: rgb(122 137 160 / 22%);
+  border-radius: 0 0 0.55rem 0.55rem;
+  background: rgb(255 255 255 / 18%);
+}
+
+.card-pocket::after {
+  top: 0.2rem;
+  height: 1px;
+  background: rgb(255 255 255 / 88%);
+}
+
+.card-pocket-surface {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  gap: 0.42rem;
+  padding: 0.62rem;
+  border: 1px solid rgb(255 255 255 / 92%);
+  border-radius: calc(var(--radius-md) - 0.18rem);
+  color: var(--ink);
+  background: rgb(255 255 255 / 92%);
   box-shadow:
-    0 0.8rem 1.4rem rgb(7 42 101 / 24%),
-    inset 0 0 0 0.3rem rgb(255 255 255 / 55%);
+    0 0.42rem 0.9rem rgb(31 43 68 / 11%),
+    inset 0 0 0 1px rgb(98 111 134 / 8%);
+  transform: translate3d(0, 0, 0) rotateX(var(--card-tilt-x))
+    rotateY(var(--card-tilt-y));
+  transform-origin: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.card-pocket-surface::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at var(--card-sheen-x) var(--card-sheen-y),
+      rgb(255 255 255 / 58%),
+      transparent 28%
+    ),
+    linear-gradient(
+      125deg,
+      rgb(255 255 255 / 20%),
+      transparent 34%,
+      rgb(175 205 234 / 12%)
+    );
+  opacity: 0;
+  pointer-events: none;
+  content: "";
+  transition: opacity 180ms ease-out;
+}
+
+.card-pocket-surface > * {
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0.45rem);
 }
 
 .card-pocket.is-missing .card-image {
@@ -1632,8 +1745,9 @@ input:focus-visible {
 
 .card-pocket.is-owned {
   box-shadow:
-    0 0.5rem 1rem rgb(7 42 101 / 20%),
-    inset 0 0 0 0.18rem var(--yellow-500);
+    0 0.5rem 1.25rem rgb(31 43 68 / 10%),
+    inset 0 0 0 0.16rem var(--yellow-500),
+    inset 0 1px 0 rgb(255 255 255 / 78%);
 }
 
 .ownership-label {
@@ -1644,23 +1758,7 @@ input:focus-visible {
   font-weight: 900;
 }
 
-.card-pocket::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    125deg,
-    rgb(255 255 255 / 50%),
-    transparent 26%,
-    transparent 70%,
-    rgb(124 210 255 / 22%)
-  );
-  content: "";
-}
-
 .card-number {
-  position: relative;
-  z-index: 1;
   color: var(--blue-700);
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
@@ -1673,12 +1771,7 @@ input:focus-visible {
   overflow: hidden;
   border-radius: 0.5rem;
   background: var(--blue-100);
-}
-
-.card-name,
-.card-rarity {
-  position: relative;
-  z-index: 1;
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .card-name {
@@ -1700,8 +1793,41 @@ input:focus-visible {
 }
 
 .empty-pocket {
-  border: 1px dashed #aeb2ba;
-  background: rgb(255 255 255 / 24%);
+  border: 1px dashed #9ea6b3;
+  background: rgb(255 255 255 / 18%);
+  box-shadow:
+    inset 0 0 0 0.32rem rgb(255 255 255 / 22%),
+    inset 0 0.5rem 1rem rgb(72 89 118 / 7%);
+}
+
+.card-pocket:focus-visible .card-pocket-surface {
+  transform: translate3d(0, -0.25rem, 0);
+  box-shadow: 0 0.75rem 2rem rgb(31 43 68 / 14%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-pocket:hover {
+    z-index: 4;
+    background: rgb(255 255 255 / 32%);
+    box-shadow:
+      0 0.7rem 1.4rem rgb(31 43 68 / 13%),
+      inset 0 1px 0 rgb(255 255 255 / 88%);
+  }
+
+  .card-pocket:hover .card-pocket-surface {
+    box-shadow: 0 1.1rem 2.4rem rgb(31 43 68 / 24%);
+    transform: translate3d(0, -0.46rem, 1rem) rotateX(var(--card-tilt-x))
+      rotateY(var(--card-tilt-y)) scale(1.018);
+    will-change: transform;
+  }
+
+  .card-pocket:hover .card-pocket-surface::after {
+    opacity: 0.8;
+  }
+
+  .card-pocket:hover .card-image {
+    transform: translateZ(0.85rem) scale(1.012);
+  }
 }
 
 .details-backdrop {
@@ -2110,6 +2236,16 @@ input:focus-visible {
     padding: 0.75rem 0.55rem 0.75rem 1.3rem;
     border-radius: 0;
   }
+  .binder-book::before {
+    inset: 0.25rem;
+    border-radius: 0;
+  }
+  .binder-book::after {
+    top: 1rem;
+    right: 0.25rem;
+    bottom: 1rem;
+    width: 0.35rem;
+  }
   .binder-spine {
     left: 0.35rem;
     width: 0.3rem;
@@ -2124,9 +2260,25 @@ input:focus-visible {
     border-radius: 0.6rem;
   }
   .card-pocket {
-    gap: 0.2rem;
-    padding: 0.35rem;
+    padding: 0.2rem;
     border-radius: 0.5rem;
+  }
+  .card-pocket-surface {
+    gap: 0.2rem;
+    padding: 0.3rem;
+    border-radius: 0.38rem;
+  }
+  .card-pocket::before,
+  .card-pocket::after {
+    right: 0.16rem;
+    left: 0.16rem;
+  }
+  .card-pocket::before {
+    bottom: 0.08rem;
+    height: 0.3rem;
+  }
+  .card-pocket::after {
+    top: 0.1rem;
   }
   .card-number {
     font-size: 0.66rem;
@@ -2219,6 +2371,12 @@ input:focus-visible {
 
   .auth-card-scene.is-collected .auth-holographic-card {
     transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) !important;
+  }
+
+  .card-pocket-surface,
+  .card-pocket:is(:hover, :focus-visible) .card-pocket-surface,
+  .card-pocket:hover .card-image {
+    transform: none !important;
   }
 }
 
@@ -2361,13 +2519,6 @@ a:active {
 
 .collection-row:hover .collection-cover--escuridao-absoluta > img {
   transform: scale(1.34);
-}
-
-.cover-code {
-  right: 0.5rem;
-  bottom: 0.5rem;
-  border-radius: var(--radius-sm);
-  background: rgb(21 23 28 / 88%);
 }
 
 .collection-series {
@@ -2538,52 +2689,6 @@ a:active {
   color: #ffffff;
 }
 
-.binder-book {
-  border: 1px solid #30353f;
-  border-radius: var(--radius-lg);
-  background: #171a20;
-  box-shadow: 0 1.125rem 3.125rem rgb(31 43 68 / 16%);
-}
-
-.binder-spine {
-  background: #747985;
-}
-
-.binder-page {
-  background: #e9edf3;
-  box-shadow: inset 0 0 1.5rem rgb(72 89 118 / 16%);
-}
-
-.card-pocket {
-  border: 1px solid rgb(255 255 255 / 72%);
-  border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 76%);
-  box-shadow: 0 0.25rem 1rem rgb(31 43 68 / 8%);
-  transition:
-    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.card-pocket:hover {
-  transform: translateY(-0.375rem);
-  box-shadow: 0 0.75rem 2rem rgb(31 43 68 / 14%);
-}
-
-.card-pocket.is-owned {
-  box-shadow:
-    0 0.5rem 1.25rem rgb(31 43 68 / 10%),
-    inset 0 0 0 0.15rem var(--yellow-500);
-}
-
-.card-number {
-  color: var(--blue-700);
-}
-
-.ownership-label {
-  color: var(--ink);
-}
-
 .page-controls button,
 .close-details {
   border: 1px solid var(--line);
@@ -2619,6 +2724,235 @@ a:active {
   width: min(100% - 3rem, 80rem);
 }
 
+.account-main {
+  width: min(100% - 3rem, 64rem);
+  padding: clamp(2.5rem, 6vw, 5rem) 0;
+}
+
+.account-heading h1 {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(2.4rem, 6vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.account-email {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+
+.profile-editor {
+  margin-top: clamp(2.5rem, 6vw, 4.5rem);
+  padding: 2rem 0;
+  border-block: 1px solid var(--line);
+}
+
+.profile-editor-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.profile-editor-heading h2 {
+  margin: 0;
+  font-family: "Sora", sans-serif;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -0.025em;
+}
+
+.profile-editor-heading p,
+.profile-photo-actions > p {
+  max-width: 58ch;
+  margin: 0.45rem 0 0;
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+
+.profile-privacy {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.profile-photo-row {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 1.75rem;
+  margin-top: 2rem;
+}
+
+.profile-avatar {
+  display: grid;
+  width: 8rem;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--blue-950);
+  font-family: "Sora", sans-serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-photo-actions strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.profile-photo-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.profile-file-button,
+.profile-remove-photo,
+.profile-name-form button {
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-file-button {
+  display: inline-flex;
+  align-items: center;
+  color: var(--white);
+  background: var(--red-600);
+}
+
+.profile-file-button:hover {
+  background: var(--red-700);
+  box-shadow: 0 0.5rem 1.25rem rgb(227 53 53 / 20%);
+}
+
+.profile-file-button:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--focus) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.profile-file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.profile-remove-photo {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+}
+
+.profile-remove-photo:hover:not(:disabled) {
+  border-color: var(--red-600);
+  color: var(--red-600);
+  background: var(--red-100);
+}
+
+.profile-file-button:has(input:disabled),
+.profile-remove-photo:disabled,
+.profile-name-form button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.profile-name-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem 1rem;
+  max-width: 44rem;
+  margin-top: 2.25rem;
+}
+
+.profile-name-form label,
+.profile-name-form small {
+  display: block;
+}
+
+.profile-name-form label {
+  margin-bottom: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.profile-name-form input {
+  width: 100%;
+  min-height: 2.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: #fbfcfe;
+}
+
+.profile-name-form input:focus {
+  border-color: var(--red-600);
+  outline: 3px solid color-mix(in srgb, var(--focus) 18%, transparent);
+  outline-offset: 1px;
+}
+
+.profile-name-form small {
+  margin-top: 0.45rem;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+}
+
+.profile-name-form button {
+  color: var(--white);
+  background: var(--red-600);
+}
+
+.profile-name-form button:hover:not(:disabled) {
+  background: var(--red-700);
+}
+
+.profile-feedback {
+  flex-basis: 100%;
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.profile-name-form > .profile-feedback {
+  grid-column: 1 / -1;
+}
+
+.profile-feedback--success {
+  color: var(--success);
+}
+
+.profile-feedback--error {
+  color: var(--error);
+}
+
+.account-next {
+  margin-top: 3rem;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
@@ -2652,7 +2986,8 @@ a:active {
   }
 
   .auth-form input,
-  .username-field {
+  .username-field,
+  .profile-name-form input {
     background: #20242c;
   }
 
@@ -2686,12 +3021,52 @@ a:active {
   }
 
   .binder-page {
-    background: #2a2f38;
+    border-color: #3d434e;
+    background-color: #2a2f38;
+    background-image: linear-gradient(
+      145deg,
+      rgb(255 255 255 / 5%),
+      transparent 42%
+    );
+    box-shadow:
+      0 0.3rem 0 #20242c,
+      0 0.55rem 0 #14171c,
+      inset 0 0 1.5rem rgb(0 0 0 / 24%);
   }
 
   .card-pocket {
-    border-color: rgb(255 255 255 / 8%);
-    background: rgb(23 26 32 / 84%);
+    border-color: rgb(255 255 255 / 11%);
+    background: rgb(255 255 255 / 5%);
+    box-shadow:
+      0 0.25rem 1rem rgb(0 0 0 / 22%),
+      inset 0 1px 0 rgb(255 255 255 / 10%),
+      inset 0 -0.28rem 0 rgb(0 0 0 / 14%);
+  }
+
+  .card-pocket-surface {
+    border-color: rgb(255 255 255 / 9%);
+    background: rgb(23 26 32 / 94%);
+    box-shadow:
+      0 0.42rem 0.9rem rgb(0 0 0 / 28%),
+      inset 0 0 0 1px rgb(255 255 255 / 4%);
+  }
+
+  .card-pocket::before {
+    border-color: rgb(255 255 255 / 10%);
+    border-top-color: rgb(255 255 255 / 5%);
+    background: rgb(255 255 255 / 3%);
+  }
+
+  .card-pocket::after {
+    background: rgb(255 255 255 / 13%);
+  }
+
+  .empty-pocket {
+    border-color: #4b515c;
+    background: rgb(255 255 255 / 3%);
+    box-shadow:
+      inset 0 0 0 0.32rem rgb(255 255 255 / 3%),
+      inset 0 0.5rem 1rem rgb(0 0 0 / 14%);
   }
 
   .image-fallback,
@@ -2716,6 +3091,28 @@ a:active {
     display: none;
   }
 
+  .account-main {
+    width: min(100% - 2rem, 64rem);
+  }
+
+  .profile-editor-heading,
+  .profile-photo-row {
+    align-items: flex-start;
+  }
+
+  .profile-editor-heading {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .profile-name-form {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-name-form button {
+    justify-self: start;
+  }
+
   .catalog-intro {
     min-height: 14rem;
   }
@@ -2727,6 +3124,27 @@ a:active {
 }
 
 @media (max-width: 40rem) {
+  .profile-photo-row {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .profile-avatar {
+    width: 5.5rem;
+    font-size: 1.6rem;
+  }
+
+  .profile-photo-actions > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-file-button,
+  .profile-remove-photo {
+    justify-content: center;
+    text-align: center;
+  }
+
   .catalog-main {
     padding-top: 1rem;
   }

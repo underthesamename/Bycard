@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
-  AuthRequestError,
-  fetchCurrentSession,
-} from "@/features/auth/auth-api";
-import {
+  CollectionRequestError,
   addPersonalCollection,
   fetchPersonalCollections,
   type PersonalCollection,
@@ -53,7 +50,6 @@ export function CatalogScreen() {
   function loadPersonalCollections(signal?: AbortSignal) {
     Promise.resolve()
       .then(() => setPersonalStatus("loading"))
-      .then(() => fetchCurrentSession(signal))
       .then(() => fetchPersonalCollections(signal))
       .then(({ data }) => {
         setPersonalCollections(data);
@@ -61,10 +57,7 @@ export function CatalogScreen() {
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.name === "AbortError") return;
-        if (
-          error instanceof AuthRequestError &&
-          error.code === "authentication_required"
-        ) {
+        if (error instanceof CollectionRequestError && error.status === 401) {
           setPersonalStatus("guest");
         } else {
           setPersonalStatus("error");
@@ -205,7 +198,6 @@ function CollectionRow({
           sizes="(max-width: 640px) 104px, 180px"
           priority={priority}
         />
-        <span className="cover-code">{collection.slug}</span>
       </div>
       <div className="collection-copy">
         <p className="collection-series">

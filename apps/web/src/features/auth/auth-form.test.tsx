@@ -113,6 +113,26 @@ describe("AuthForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ocultar" }));
     expect(password).toHaveAttribute("type", "password");
   });
+
+  it("exige um caractere especial no cadastro", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AuthForm mode="register" />);
+    fireEvent.change(screen.getByLabelText("Senha"), {
+      target: { value: "senhasemespecial15" },
+    });
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: "Criar meu fichário" })
+        .closest("form")!,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "A senha precisa ter pelo menos um caractere especial.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("LogoutButton", () => {

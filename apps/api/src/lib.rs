@@ -9,4 +9,5 @@ mod auth;
 mod catalog;
 mod collections;
 mod health;
+mod profile;
 mod request_context;

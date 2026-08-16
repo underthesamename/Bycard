@@ -18,24 +18,23 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("CatalogScreen", () => {
   it("mostra carregamento e renderiza o catálogo da API", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation((input: RequestInfo | URL) =>
-        String(input).includes("/auth/me")
-          ? Promise.resolve(unauthorizedResponse())
-          : Promise.resolve(
-              jsonResponse({
-                data: [collection],
-                pagination: {
-                  page: 1,
-                  pageSize: 20,
-                  totalItems: 1,
-                  totalPages: 1,
-                },
-              }),
-            ),
-      ),
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      String(input).includes("/auth/me") ||
+      String(input).includes("/me/collections")
+        ? Promise.resolve(unauthorizedResponse())
+        : Promise.resolve(
+            jsonResponse({
+              data: [collection],
+              pagination: {
+                page: 1,
+                pageSize: 20,
+                totalItems: 1,
+                totalPages: 1,
+              },
+            }),
+          ),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<CatalogScreen />);
     expect(
@@ -51,12 +50,21 @@ describe("CatalogScreen", () => {
     expect(
       screen.getByRole("img", { name: /Capa da coleção Horizonte Solar/ }),
     ).toHaveTextContent("Imagem indisponível");
+    expect(screen.queryByText(collection.slug)).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes("/auth/me"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("explica a falha e permite tentar novamente", async () => {
     let catalogAttempts = 0;
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-      if (String(input).includes("/auth/me")) {
+      if (
+        String(input).includes("/auth/me") ||
+        String(input).includes("/me/collections")
+      ) {
         return Promise.resolve(unauthorizedResponse());
       }
       catalogAttempts += 1;

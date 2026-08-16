@@ -1,12 +1,13 @@
-use std::{env, str::FromStr, time::Duration};
+use std::{env, io::Cursor, str::FromStr, time::Duration};
 
 use anyhow::{Context, Result};
 use axum::{
     Router,
     body::{Body, to_bytes},
-    http::{Request, StatusCode, header},
+    http::{HeaderMap, Request, StatusCode, header},
 };
 use bycard_api::app::{AuthSettings, build_router};
+use image::{DynamicImage, ImageFormat};
 use serde_json::{Value, json};
 use sqlx::{AssertSqlSafe, PgPool, postgres::PgConnectOptions};
 use tower::ServiceExt;
@@ -49,6 +50,22 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         ORIGIN.parse()?,
         auth_settings(false, Duration::from_secs(3600)),
     )?;
+
+    let missing_special = post_json(
+        &app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Senha sem símbolo",
+            "username": "sem.simbolo",
+            "email": "sem-simbolo@example.com",
+            "password": "123456789012345"
+        }),
+        None,
+        None,
+    )
+    .await?;
+    assert_eq!(missing_special.status, StatusCode::BAD_REQUEST);
+    assert_eq!(missing_special.body["error"]["code"], "invalid_password");
 
     let registration = post_json(
         &app,
@@ -93,6 +110,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         duplicate.body["error"]["code"],
         "account_already_registered"
     );
+    verify_username_uniqueness(pool, &app).await?;
 
     let valid_session = get(&app, "/api/v1/auth/me", Some(&cookie)).await?;
     assert_eq!(valid_session.status, StatusCode::OK);
@@ -126,6 +144,7 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
         .as_str()
         .context("CSRF response must contain a token")?;
     assert!(!csrf.raw_body.contains(cookie_value(&login_cookie)));
+    verify_profile_contract(&app, &login_cookie, csrf_token).await?;
 
     let rejected_logout = post_json(
         &app,
@@ -162,6 +181,186 @@ async fn exercise_authentication_contract(pool: &PgPool) -> Result<()> {
     verify_expired_session(pool).await?;
     verify_rate_limit(pool).await?;
     verify_production_cookie(pool).await?;
+    Ok(())
+}
+
+async fn verify_profile_contract(app: &Router, cookie: &str, csrf_token: &str) -> Result<()> {
+    let private_avatar = app
+        .clone()
+        .oneshot(Request::get("/api/v1/me/avatar").body(Body::empty())?)
+        .await?;
+    assert_eq!(private_avatar.status(), StatusCode::UNAUTHORIZED);
+
+    let rejected_update = put_json(
+        app,
+        "/api/v1/me/profile",
+        json!({ "displayName": "Ana Atualizada" }),
+        Some(cookie),
+        None,
+    )
+    .await?;
+    assert_eq!(rejected_update.status, StatusCode::FORBIDDEN);
+    assert_eq!(rejected_update.body["error"]["code"], "csrf_rejected");
+
+    let update = put_json(
+        app,
+        "/api/v1/me/profile",
+        json!({ "displayName": "  Ana Atualizada  " }),
+        Some(cookie),
+        Some(csrf_token),
+    )
+    .await?;
+    assert_eq!(update.status, StatusCode::OK);
+    assert_eq!(update.body["user"]["displayName"], "Ana Atualizada");
+    assert_eq!(update.body["user"]["avatarVersion"], Value::Null);
+
+    let invalid_avatar = put_bytes(
+        app,
+        "/api/v1/me/avatar",
+        b"not-an-image".to_vec(),
+        "image/png",
+        cookie,
+        csrf_token,
+    )
+    .await?;
+    assert_eq!(invalid_avatar.status, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid_avatar.body["error"]["code"], "invalid_avatar");
+
+    let oversized_avatar = app
+        .clone()
+        .oneshot(
+            Request::put("/api/v1/me/avatar")
+                .header(header::CONTENT_TYPE, "image/png")
+                .header(header::ORIGIN, ORIGIN)
+                .header(header::COOKIE, cookie_value(cookie))
+                .header("x-csrf-token", csrf_token)
+                .body(Body::from(vec![0_u8; 2 * 1024 * 1024 + 1]))?,
+        )
+        .await?;
+    assert_eq!(oversized_avatar.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    let upload = put_bytes(
+        app,
+        "/api/v1/me/avatar",
+        test_png()?,
+        "image/png",
+        cookie,
+        csrf_token,
+    )
+    .await?;
+    assert_eq!(upload.status, StatusCode::OK);
+    let avatar_version = upload.body["avatarVersion"]
+        .as_str()
+        .context("avatar upload must return its version")?;
+
+    let avatar = get_binary(app, "/api/v1/me/avatar", cookie, None).await?;
+    assert_eq!(avatar.status, StatusCode::OK);
+    assert_eq!(
+        avatar.headers.get(header::CONTENT_TYPE),
+        Some(&"image/jpeg".parse()?)
+    );
+    assert!(avatar.body.starts_with(&[0xff, 0xd8, 0xff]));
+    assert!(avatar.body.len() <= 128 * 1024);
+    assert_eq!(
+        avatar.headers.get(header::ETAG),
+        Some(&format!("\"{avatar_version}\"").parse()?)
+    );
+
+    let not_modified = get_binary(
+        app,
+        "/api/v1/me/avatar",
+        cookie,
+        Some(&format!("\"{avatar_version}\"")),
+    )
+    .await?;
+    assert_eq!(not_modified.status, StatusCode::NOT_MODIFIED);
+    assert!(not_modified.body.is_empty());
+
+    let deletion = delete(app, "/api/v1/me/avatar", cookie, csrf_token).await?;
+    assert_eq!(deletion.status, StatusCode::NO_CONTENT);
+    let missing_avatar = get_binary(app, "/api/v1/me/avatar", cookie, None).await?;
+    assert_eq!(missing_avatar.status, StatusCode::NOT_FOUND);
+
+    let session = get(app, "/api/v1/auth/me", Some(cookie)).await?;
+    assert_eq!(session.body["user"]["displayName"], "Ana Atualizada");
+    assert_eq!(session.body["user"]["avatarVersion"], Value::Null);
+    Ok(())
+}
+
+async fn verify_username_uniqueness(pool: &PgPool, app: &Router) -> Result<()> {
+    let normalized_duplicate = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Outra colecionadora",
+            "username": "  ANA.TCG  ",
+            "email": "outra-ana@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    )
+    .await?;
+    assert_eq!(normalized_duplicate.status, StatusCode::CONFLICT);
+    assert_eq!(
+        normalized_duplicate.body["error"]["code"],
+        "account_already_registered"
+    );
+
+    let first_registration = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Primeira colecionadora",
+            "username": "Corrida.TCG",
+            "email": "primeira-corrida@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    );
+    let second_registration = post_json(
+        app,
+        "/api/v1/auth/register",
+        json!({
+            "displayName": "Segunda colecionadora",
+            "username": " corrida.tcg ",
+            "email": "segunda-corrida@example.com",
+            "password": PASSWORD
+        }),
+        None,
+        None,
+    );
+    let (first_registration, second_registration) =
+        tokio::join!(first_registration, second_registration);
+    let registrations = [first_registration?, second_registration?];
+
+    assert_eq!(
+        registrations
+            .iter()
+            .filter(|response| response.status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        registrations
+            .iter()
+            .filter(|response| response.status == StatusCode::CONFLICT)
+            .count(),
+        1
+    );
+    let conflict = registrations
+        .iter()
+        .find(|response| response.status == StatusCode::CONFLICT)
+        .context("one concurrent registration must be rejected")?;
+    assert_eq!(conflict.body["error"]["code"], "account_already_registered");
+
+    let stored_users =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE username = $1")
+            .bind("corrida.tcg")
+            .fetch_one(pool)
+            .await?;
+    assert_eq!(stored_users, 1);
     Ok(())
 }
 
@@ -296,6 +495,84 @@ async fn post_json(
     send(app, builder.body(Body::from(bytes))?).await
 }
 
+async fn put_json(
+    app: &Router,
+    path: &str,
+    body: Value,
+    cookie: Option<&str>,
+    csrf_token: Option<&str>,
+) -> Result<TestResponse> {
+    let mut builder = Request::put(path)
+        .header(header::ACCEPT, "application/json")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::ORIGIN, ORIGIN);
+    if let Some(cookie) = cookie {
+        builder = builder.header(header::COOKIE, cookie_value(cookie));
+    }
+    if let Some(csrf_token) = csrf_token {
+        builder = builder.header("x-csrf-token", csrf_token);
+    }
+    send(app, builder.body(Body::from(serde_json::to_vec(&body)?))?).await
+}
+
+async fn put_bytes(
+    app: &Router,
+    path: &str,
+    body: Vec<u8>,
+    content_type: &str,
+    cookie: &str,
+    csrf_token: &str,
+) -> Result<TestResponse> {
+    let request = Request::put(path)
+        .header(header::ACCEPT, "application/json")
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::ORIGIN, ORIGIN)
+        .header(header::COOKIE, cookie_value(cookie))
+        .header("x-csrf-token", csrf_token)
+        .body(Body::from(body))?;
+    send(app, request).await
+}
+
+async fn delete(app: &Router, path: &str, cookie: &str, csrf_token: &str) -> Result<TestResponse> {
+    let request = Request::delete(path)
+        .header(header::ACCEPT, "application/json")
+        .header(header::ORIGIN, ORIGIN)
+        .header(header::COOKIE, cookie_value(cookie))
+        .header("x-csrf-token", csrf_token)
+        .body(Body::empty())?;
+    send(app, request).await
+}
+
+async fn get_binary(
+    app: &Router,
+    path: &str,
+    cookie: &str,
+    etag: Option<&str>,
+) -> Result<BinaryTestResponse> {
+    let mut builder = Request::get(path)
+        .header(header::ACCEPT, "image/jpeg")
+        .header(header::COOKIE, cookie_value(cookie));
+    if let Some(etag) = etag {
+        builder = builder.header(header::IF_NONE_MATCH, etag);
+    }
+    let response = app.clone().oneshot(builder.body(Body::empty())?).await?;
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await?.to_vec();
+    Ok(BinaryTestResponse {
+        status,
+        headers,
+        body,
+    })
+}
+
+fn test_png() -> Result<Vec<u8>> {
+    let image = DynamicImage::new_rgba8(32, 24);
+    let mut bytes = Cursor::new(Vec::new());
+    image.write_to(&mut bytes, ImageFormat::Png)?;
+    Ok(bytes.into_inner())
+}
+
 async fn send(app: &Router, request: Request<Body>) -> Result<TestResponse> {
     let response = app.clone().oneshot(request).await?;
     let status = response.status();
@@ -328,4 +605,10 @@ struct TestResponse {
     cookie: Option<String>,
     raw_body: String,
     body: Value,
+}
+
+struct BinaryTestResponse {
+    status: StatusCode,
+    headers: HeaderMap,
+    body: Vec<u8>,
 }

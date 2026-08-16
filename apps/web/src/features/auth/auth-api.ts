@@ -5,6 +5,7 @@ export type AuthUser = {
   displayName: string;
   username: string;
   email: string;
+  avatarVersion: string | null;
 };
 
 type AuthResponse = { user: AuthUser; expiresAt: string };
@@ -55,6 +56,39 @@ export async function fetchCurrentSession(signal?: AbortSignal) {
 
 export async function fetchCsrfToken() {
   return authRequest<{ csrfToken: string }>("/auth/csrf");
+}
+
+export async function updateProfile(displayName: string) {
+  const { csrfToken } = await fetchCsrfToken();
+  return authRequest<{ user: AuthUser }>("/me/profile", {
+    method: "PUT",
+    body: JSON.stringify({ displayName }),
+    headers: { "x-csrf-token": csrfToken },
+  });
+}
+
+export async function uploadProfileAvatar(file: File) {
+  const { csrfToken } = await fetchCsrfToken();
+  return authRequest<{ avatarVersion: string }>("/me/avatar", {
+    method: "PUT",
+    body: file,
+    headers: {
+      "Content-Type": file.type,
+      "x-csrf-token": csrfToken,
+    },
+  });
+}
+
+export async function deleteProfileAvatar() {
+  const { csrfToken } = await fetchCsrfToken();
+  await authRequest<void>("/me/avatar", {
+    method: "DELETE",
+    headers: { "x-csrf-token": csrfToken },
+  });
+}
+
+export function profileAvatarUrl(version: string) {
+  return `${API_V1_URL}/me/avatar?v=${encodeURIComponent(version)}`;
 }
 
 async function authRequest<T>(path: string, init: RequestInit = {}) {

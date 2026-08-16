@@ -3,11 +3,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LogoutButton } from "@/features/auth/logout-button";
+import { ProfileEditor } from "@/features/auth/profile-editor";
+import type { AuthUser } from "@/features/auth/auth-api";
 import { BrandHeader } from "@/features/catalog/brand-header";
 import { SERVER_API_V1_URL } from "@/lib/server-api-base";
 
 type Session = {
-  user: { displayName: string; username: string; email: string };
+  user: AuthUser;
 };
 
 async function currentSession(): Promise<Session | null> {
@@ -26,12 +28,15 @@ export default async function AccountPage() {
 
   return (
     <div className="app-shell account-shell">
-      <BrandHeader />
+      <BrandHeader initialUser={session.user} />
       <main className="account-main">
-        <h1>Olá, {session.user.displayName}.</h1>
-        <p className="account-email">
-          @{session.user.username} · {session.user.email}
-        </p>
+        <div className="account-heading">
+          <h1>Olá, {session.user.displayName}.</h1>
+          <p className="account-email">
+            @{session.user.username} · {session.user.email}
+          </p>
+        </div>
+        <ProfileEditor initialUser={session.user} />
         <section className="account-next">
           <div>
             <h2>Escolha a coleção que você quer completar.</h2>
