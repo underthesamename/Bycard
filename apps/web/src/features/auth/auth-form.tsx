@@ -22,6 +22,7 @@ export function AuthForm({ mode, onAuthenticated }: AuthFormProps) {
   const [password, setPassword] = useState("");
   const isRegister = mode === "register";
   const pending = submissionState !== "idle";
+  const hasSpecialCharacter = /[^\p{L}\p{N}\s]/u.test(password);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +32,11 @@ export function AuthForm({ mode, onAuthenticated }: AuthFormProps) {
     try {
       const submittedPassword = String(data.get("password"));
       if (isRegister) {
+        if (!hasSpecialCharacter) {
+          setError("A senha precisa ter pelo menos um caractere especial.");
+          setSubmissionState("idle");
+          return;
+        }
         await registerAccount({
           displayName: String(data.get("displayName")),
           username: String(data.get("username")),
@@ -146,6 +152,9 @@ export function AuthForm({ mode, onAuthenticated }: AuthFormProps) {
           <ul className="password-rules" id="password-guidance">
             <li data-met={password.length >= 15}>Pelo menos 15 caracteres</li>
             <li data-met={password.length <= 128}>No máximo 128 caracteres</li>
+            <li data-met={hasSpecialCharacter}>
+              Pelo menos um caractere especial
+            </li>
             <li data-met={password.trim().length === password.length}>
               Sem espaços no começo ou no fim
             </li>

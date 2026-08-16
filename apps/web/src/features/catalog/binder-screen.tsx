@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-
 import {
-  AuthRequestError,
-  fetchCurrentSession,
-} from "@/features/auth/auth-api";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+
 import {
   CollectionRequestError,
   fetchPersonalCollection,
@@ -29,6 +31,14 @@ import {
 } from "./icons";
 
 const CARDS_PER_PAGE = 9;
+const ABOVE_FOLD_CARD_IMAGES = 3;
+const MAX_CARD_TILT_DEGREES = 7;
+const CARD_MOTION_PROPERTIES = [
+  "--card-tilt-x",
+  "--card-tilt-y",
+  "--card-sheen-x",
+  "--card-sheen-y",
+] as const;
 
 type BinderState =
   | { status: "loading" }
@@ -343,10 +353,11 @@ export function BinderScreen({ setId }: { setId: string }) {
                 <div className="binder-book">
                   <span className="binder-spine" aria-hidden="true" />
                   <div className="binder-page">
-                    {visibleCards.map((card) => (
+                    {visibleCards.map((card, index) => (
                       <CardSlot
                         key={card.id}
                         card={card}
+                        priority={index < ABOVE_FOLD_CARD_IMAGES}
                         onSelect={setSelectedCard}
                       />
                     ))}
@@ -384,9 +395,11 @@ export function BinderScreen({ setId }: { setId: string }) {
 
 function CardSlot({
   card,
+  priority,
   onSelect,
 }: {
   card: PersonalCard;
+  priority: boolean;
   onSelect: (card: PersonalCard) => void;
 }) {
   return (
@@ -395,25 +408,64 @@ function CardSlot({
       className={`card-pocket ${card.quantity > 0 ? "is-owned" : "is-missing"}`}
       data-card-id={card.id}
       onClick={() => onSelect(card)}
+      onPointerMove={updateCardMotion}
+      onPointerLeave={(event) => resetCardMotion(event.currentTarget)}
+      onPointerCancel={(event) => resetCardMotion(event.currentTarget)}
+      onBlur={(event) => resetCardMotion(event.currentTarget)}
       aria-label={`Abrir detalhes da carta ${card.localNumber}, ${card.name}. ${card.quantity > 0 ? `${card.quantity} cópia${card.quantity === 1 ? "" : "s"}` : "Faltante"}`}
     >
-      <span className="card-number">{card.localNumber}</span>
-      <span className="card-image">
-        <CatalogImage
-          src={card.imageSmallUrl}
-          alt={`Imagem da carta ${card.name}`}
-          sizes="(max-width: 480px) 27vw, (max-width: 900px) 180px, 220px"
-        />
-      </span>
-      <span className="card-name">{card.name}</span>
-      <span className="ownership-label">
-        {card.quantity > 0 ? `Possuída · ${card.quantity}` : "Faltante"}
-      </span>
-      <span className="card-rarity">
-        {card.rarity ?? "Raridade não informada"}
+      <span className="card-pocket-surface">
+        <span className="card-number">{card.localNumber}</span>
+        <span className="card-image">
+          <CatalogImage
+            src={card.imageSmallUrl}
+            alt={`Imagem da carta ${card.name}`}
+            sizes="(max-width: 480px) 27vw, (max-width: 900px) 180px, 220px"
+            priority={priority}
+          />
+        </span>
+        <span className="card-name">{card.name}</span>
+        <span className="ownership-label">
+          {card.quantity > 0 ? `Possuída · ${card.quantity}` : "Faltante"}
+        </span>
+        <span className="card-rarity">
+          {card.rarity ?? "Raridade não informada"}
+        </span>
       </span>
     </button>
   );
+}
+
+function updateCardMotion(event: ReactPointerEvent<HTMLButtonElement>) {
+  if (event.pointerType !== "mouse") return;
+
+  const card = event.currentTarget;
+  const bounds = card.getBoundingClientRect();
+  if (bounds.width === 0 || bounds.height === 0) return;
+
+  const horizontalPosition = clampUnit(
+    (event.clientX - bounds.left) / bounds.width,
+  );
+  const verticalPosition = clampUnit(
+    (event.clientY - bounds.top) / bounds.height,
+  );
+  const horizontalTilt = (horizontalPosition - 0.5) * MAX_CARD_TILT_DEGREES * 2;
+  const verticalTilt = (0.5 - verticalPosition) * MAX_CARD_TILT_DEGREES * 2;
+
+  card.style.setProperty("--card-tilt-x", `${verticalTilt}deg`);
+  card.style.setProperty("--card-tilt-y", `${horizontalTilt}deg`);
+  card.style.setProperty("--card-sheen-x", `${horizontalPosition * 100}%`);
+  card.style.setProperty("--card-sheen-y", `${verticalPosition * 100}%`);
+}
+
+function resetCardMotion(card: HTMLButtonElement) {
+  CARD_MOTION_PROPERTIES.forEach((property) => {
+    card.style.removeProperty(property);
+  });
+}
+
+function clampUnit(value: number) {
+  return Math.min(Math.max(value, 0), 1);
 }
 
 function CardDetails({
@@ -633,46 +685,35 @@ async function fetchBinder(
   setId: string,
   signal: AbortSignal,
 ): Promise<BinderState> {
-  const collectionResponse = await fetchCollection(setId, signal);
-  try {
-    await fetchCurrentSession(signal);
-    try {
-      const personal = await fetchPersonalCollection(setId, signal);
-      return {
-        status: "ready",
-        collection: collectionResponse.data,
-        cards: personal.data.cards,
-        mode: "tracked",
-        stats: personal.data.collection,
-      };
-    } catch (error) {
-      if (!(error instanceof CollectionRequestError) || error.status !== 404) {
-        throw error;
-      }
-    }
-    const cardsResponse = await fetchCards(setId, "", signal);
+  const [collectionResponse, personalResult] = await Promise.all([
+    fetchCollection(setId, signal),
+    fetchPersonalCollection(setId, signal)
+      .then((personal) => ({ status: "tracked" as const, personal }))
+      .catch((error: unknown) => ({ status: "error" as const, error })),
+  ]);
+  if (personalResult.status === "tracked") {
     return {
       status: "ready",
       collection: collectionResponse.data,
-      cards: cardsResponse.data.map((card) => ({ ...card, quantity: 0 })),
-      mode: "untracked",
-      stats: null,
+      cards: personalResult.personal.data.cards,
+      mode: "tracked",
+      stats: personalResult.personal.data.collection,
     };
-  } catch (error) {
-    if (!(error instanceof Error) || error.name === "AbortError") throw error;
-    if (
-      !(error instanceof AuthRequestError) ||
-      error.code !== "authentication_required"
-    ) {
-      throw error;
-    }
+  }
+  const { error } = personalResult;
+  if (error instanceof Error && error.name === "AbortError") throw error;
+  if (
+    !(error instanceof CollectionRequestError) ||
+    ![401, 404].includes(error.status)
+  ) {
+    throw error;
   }
   const cardsResponse = await fetchCards(setId, "", signal);
   return {
     status: "ready",
     collection: collectionResponse.data,
     cards: cardsResponse.data.map((card) => ({ ...card, quantity: 0 })),
-    mode: "guest",
+    mode: error.status === 401 ? "guest" : "untracked",
     stats: null,
   };
 }

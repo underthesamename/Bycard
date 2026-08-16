@@ -14,7 +14,7 @@ use tower_http::{
     timeout::TimeoutLayer,
 };
 
-use crate::{auth, catalog, collections, health, request_context};
+use crate::{auth, catalog, collections, health, profile, request_context};
 
 pub use crate::auth::AuthSettings;
 
@@ -47,14 +47,20 @@ pub fn build_router(
         ])
         .allow_credentials(true);
 
+    let standard_api = Router::new()
+        .merge(catalog::router())
+        .merge(auth::router())
+        .merge(collections::router())
+        .merge(profile::router())
+        .layer(RequestBodyLimitLayer::new(16 * 1024));
+    let avatar_api = profile::avatar_router()
+        .layer(RequestBodyLimitLayer::new(profile::MAX_AVATAR_UPLOAD_BYTES));
+
     Ok(Router::new()
         .route("/health/live", get(health::liveness))
         .route("/health/ready", get(health::readiness))
-        .nest("/api/v1", catalog::router())
-        .nest("/api/v1", auth::router())
-        .nest("/api/v1", collections::router())
+        .nest("/api/v1", standard_api.merge(avatar_api))
         .with_state(state)
-        .layer(RequestBodyLimitLayer::new(16 * 1024))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(15),

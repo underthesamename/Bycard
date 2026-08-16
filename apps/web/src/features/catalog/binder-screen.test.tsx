@@ -35,7 +35,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("BinderScreen", () => {
   it("busca, pagina e mostra fallback sem perder os detalhes", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockImplementation(mockCatalogRequest));
+    const fetchMock = vi.fn().mockImplementation(mockCatalogRequest);
+    vi.stubGlobal("fetch", fetchMock);
     render(<BinderScreen setId={setId} />);
 
     expect(
@@ -47,6 +48,12 @@ describe("BinderScreen", () => {
     expect(
       screen.getByRole("button", { name: /carta 001, Carta 1/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Imagem da carta Carta 1" }),
+    ).not.toHaveAttribute("loading", "lazy");
+    expect(
+      screen.getByRole("img", { name: "Imagem da carta Carta 4" }),
+    ).toHaveAttribute("loading", "lazy");
     expect(
       screen.queryByRole("button", { name: /carta 010/ }),
     ).not.toBeInTheDocument();
@@ -79,6 +86,11 @@ describe("BinderScreen", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Fechar detalhes" }));
     await waitFor(() => expect(cardButton).toHaveFocus());
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes("/auth/me"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("mostra resultado vazio e limpa a busca", async () => {
@@ -96,6 +108,45 @@ describe("BinderScreen", () => {
     expect(
       screen.getByRole("heading", { name: "Página 1 de 2" }),
     ).toBeInTheDocument();
+  });
+
+  it("inclina a carta em direção ao cursor e volta ao repouso", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(mockCatalogRequest));
+    render(<BinderScreen setId={setId} />);
+
+    const cardButton = await screen.findByRole("button", {
+      name: /carta 001, Carta 1/,
+    });
+    vi.spyOn(cardButton, "getBoundingClientRect").mockReturnValue({
+      bottom: 100,
+      height: 100,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerMove(cardButton, {
+      clientX: 75,
+      clientY: 25,
+      pointerType: "mouse",
+    });
+
+    expect(cardButton).toHaveStyle({
+      "--card-sheen-x": "75%",
+      "--card-sheen-y": "25%",
+      "--card-tilt-x": "3.5deg",
+      "--card-tilt-y": "3.5deg",
+    });
+
+    fireEvent.pointerLeave(cardButton);
+    expect(cardButton.style.getPropertyValue("--card-sheen-x")).toBe("");
+    expect(cardButton.style.getPropertyValue("--card-sheen-y")).toBe("");
+    expect(cardButton.style.getPropertyValue("--card-tilt-x")).toBe("");
+    expect(cardButton.style.getPropertyValue("--card-tilt-y")).toBe("");
   });
 
   it("atualiza quantidade, progresso e filtros no fichário acompanhado", async () => {
@@ -184,6 +235,19 @@ function personalDetail(quantity: number) {
 function mockCatalogRequest(input: RequestInfo | URL) {
   const url = String(input);
   if (url.includes("/auth/me")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "authentication_required",
+            message: "Sua sessão não é válida.",
+          },
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+  }
+  if (url.includes("/me/collections/")) {
     return Promise.resolve(
       new Response(
         JSON.stringify({

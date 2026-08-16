@@ -175,6 +175,7 @@ struct UserDto {
     display_name: String,
     username: String,
     email: String,
+    avatar_version: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -184,6 +185,7 @@ pub(crate) struct SessionRow {
     display_name: String,
     username: String,
     email: String,
+    avatar_version: Option<Uuid>,
     expires_at: DateTime<Utc>,
     last_seen_at: DateTime<Utc>,
 }
@@ -256,6 +258,7 @@ async fn register(
             display_name,
             username,
             email,
+            avatar_version: None,
         },
         session.expires_at,
         state.auth.session_cookie(&session.token)?,
@@ -281,8 +284,8 @@ async fn login(
     {
         return Err(AuthError::too_many_requests());
     }
-    let credentials = sqlx::query_as::<_, (Uuid, String, String, String, String)>(
-        "SELECT id, display_name, username, email, password_hash FROM users WHERE (email = $1 OR username = $1) AND deleted_at IS NULL",
+    let credentials = sqlx::query_as::<_, (Uuid, String, String, String, String, Option<Uuid>)>(
+        "SELECT id, display_name, username, email, password_hash, avatar_version FROM users WHERE (email = $1 OR username = $1) AND deleted_at IS NULL",
     )
     .bind(&identifier)
     .fetch_optional(&state.pool)
@@ -294,7 +297,7 @@ async fn login(
             value.4.as_str()
         });
     let password_matches = verify_password(request.password, stored_hash.to_owned()).await?;
-    let Some((user_id, display_name, username, email, _)) =
+    let Some((user_id, display_name, username, email, _, avatar_version)) =
         credentials.filter(|_| password_matches)
     else {
         return Err(AuthError::invalid_credentials());
@@ -330,6 +333,7 @@ async fn login(
             display_name,
             username,
             email,
+            avatar_version,
         },
         session.expires_at,
         state.auth.session_cookie(&session.token)?,
@@ -360,6 +364,7 @@ async fn me(
             display_name: session.display_name,
             username: session.username,
             email: session.email,
+            avatar_version: session.avatar_version,
         },
         expires_at: session.expires_at,
     }))
@@ -451,7 +456,7 @@ pub(crate) async fn active_session(
         .ok_or_else(AuthError::unauthorized)?;
     let token_hash = state.auth.token_hash(b"session", token);
     sqlx::query_as::<_, SessionRow>(
-        "SELECT s.id AS session_id, u.id AS user_id, u.display_name, u.username, u.email, s.expires_at, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND s.last_seen_at > NOW() - $2::interval AND u.deleted_at IS NULL",
+        "SELECT s.id AS session_id, u.id AS user_id, u.display_name, u.username, u.email, u.avatar_version, s.expires_at, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND s.last_seen_at > NOW() - $2::interval AND u.deleted_at IS NULL",
     )
     .bind(token_hash.as_slice())
     .bind(duration_interval(state.auth.settings.idle_ttl))
@@ -602,7 +607,7 @@ fn normalize_login_identifier(raw: &str) -> Result<String, AuthError> {
     }
 }
 
-fn validate_display_name(raw: &str) -> Result<String, AuthError> {
+pub(crate) fn validate_display_name(raw: &str) -> Result<String, AuthError> {
     let display_name = raw.trim();
     let length = display_name.chars().count();
     if (2..=DISPLAY_NAME_MAX_CHARS).contains(&length) && !display_name.chars().any(char::is_control)
@@ -618,12 +623,18 @@ fn validate_display_name(raw: &str) -> Result<String, AuthError> {
 
 fn validate_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
-    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&length) && password.trim() == password {
+    let has_special_character = password
+        .chars()
+        .any(|character| !character.is_alphanumeric() && !character.is_whitespace());
+    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&length)
+        && password.trim() == password
+        && has_special_character
+    {
         Ok(())
     } else {
         Err(AuthError::bad_request(
             "invalid_password",
-            "A senha deve ter entre 15 e 128 caracteres e não pode começar ou terminar com espaços.",
+            "A senha deve ter entre 15 e 128 caracteres, incluir um caractere especial e não pode começar ou terminar com espaços.",
         ))
     }
 }
@@ -814,7 +825,8 @@ mod tests {
 
     #[test]
     fn validates_password_boundaries() {
-        assert!(validate_password("123456789012345").is_ok());
+        assert!(validate_password("12345678901234!").is_ok());
+        assert!(validate_password("123456789012345").is_err());
         assert!(validate_password("curta").is_err());
         assert!(validate_password(&"x".repeat(129)).is_err());
     }

@@ -6,16 +6,17 @@ import { useEffect, useState } from "react";
 
 import { fetchCurrentSession, type AuthUser } from "@/features/auth/auth-api";
 
-export function BrandHeader() {
-  const [user, setUser] = useState<AuthUser | null>(null);
+export function BrandHeader({ initialUser }: { initialUser?: AuthUser }) {
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null);
 
   useEffect(() => {
+    if (initialUser) return;
     const controller = new AbortController();
     fetchCurrentSession(controller.signal)
       .then(({ user: currentUser }) => setUser(currentUser))
       .catch(() => setUser(null));
     return () => controller.abort();
-  }, []);
+  }, [initialUser]);
 
   return (
     <header className="site-header">
